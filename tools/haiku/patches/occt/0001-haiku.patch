@@ -1,0 +1,198 @@
+Haiku support for Open CASCADE 7.6.0 (static, no X11, no fontconfig).
+
+- build: a Haiku branch for the libraries a static OCCT asks its users to
+  link (threads, dlopen() and the C++ runtime are in libroot and the
+  compiler's defaults; sockets in libnetwork); no Xlib.
+- OSD: Haiku is a BSD-like Unix for the path syntax; <signal.h> only.
+- locale: Haiku has newlocale()/uselocale() (the thread-local "C" locale
+  the readers need) but no strtod_l().
+- Standard_StackTrace: backtrace() is not in libroot.
+- Font_FontMgr: no fontconfig. The fonts are found in the font directories
+  of the system and the user (find_directory()), and the default aliases
+  name the Noto families Haiku ships.
+
+--- a/adm/cmake/occt_csf.cmake
++++ b/adm/cmake/occt_csf.cmake
+@@ -133,6 +133,13 @@
+     set (CSF_ThreadLibs  "c")
+     set (CSF_OpenGlesLibs "EGL GLESv2")
+     set (CSF_androidlog  "log")
++  elseif (HAIKU)
++    # threads, dlopen() and the C++ runtime are in libroot and the compiler's
++    # defaults; no X11, no fontconfig (Font_FontMgr scans the font directories)
++    set (CSF_wsock32     "network")
++    if (USE_OPENGL)
++      set (CSF_OpenGlLibs "GL")
++    endif()
+   elseif (UNIX)
+     set (CSF_ThreadLibs  "pthread rt stdc++")
+     if (USE_XLIB)
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -384,7 +384,7 @@
+ set (USE_TBB       OFF CACHE BOOL "${USE_TBB_DESCR}")
+ set (USE_EIGEN     OFF CACHE BOOL "${USE_EIGEN_DESCR}")
+ 
+-if (WIN32 OR ANDROID OR IOS OR EMSCRIPTEN)
++if (WIN32 OR ANDROID OR IOS OR EMSCRIPTEN OR HAIKU)
+   # no Xlib
+ elseif (APPLE)
+   set (USE_XLIB OFF CACHE BOOL "${USE_XLIB_DESCR}")
+--- a/src/Font/Font_FontMgr.cxx
++++ b/src/Font/Font_FontMgr.cxx
+@@ -80,7 +80,7 @@
+       NULL
+     };
+ 
+-  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
++  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__) && !defined(__HAIKU__)
+     // X11 configuration file in plain text format (obsolete - doesn't exists in modern distributives)
+     static Standard_CString myFontServiceConf[] = {"/etc/X11/fs/config",
+                                                    "/usr/X11R6/lib/X11/fs/config",
+@@ -93,6 +93,17 @@
+     #include <fontconfig/fontconfig.h>
+   #endif
+ 
++  #ifdef __HAIKU__
++    // Haiku has no fontconfig: the fonts are in the font directories of the
++    // system and of the user, packaged or not.
++    #include <FindDirectory.h>
++    static const directory_which Font_FontMgr_HaikuFontsDirs[] = {B_SYSTEM_FONTS_DIRECTORY,
++                                                                  B_SYSTEM_NONPACKAGED_FONTS_DIRECTORY,
++                                                                  B_USER_FONTS_DIRECTORY,
++                                                                  B_USER_NONPACKAGED_FONTS_DIRECTORY
++                                                                 };
++  #endif
++
+   #ifdef __APPLE__
+     // default fonts paths in Mac OS X
+     static Standard_CString myDefaultFontsDirs[] = {"/System/Library/Fonts",
+@@ -490,6 +501,13 @@
+   aMono  ->Append (Font_FontAlias ("droid sans mono"));
+   aSerif ->Append (Font_FontAlias ("droid serif"));
+   aSans  ->Append (Font_FontAlias ("roboto")); // actually DroidSans.ttf
++#elif defined(__HAIKU__)
++  // the Noto families are Haiku's default fonts
++  aMono  ->Append (Font_FontAlias ("noto sans mono"));
++  aSerif ->Append (Font_FontAlias ("noto serif"));
++  aSans  ->Append (Font_FontAlias ("noto sans"));
++  aSerif ->Append (Font_FontAlias ("dejavu serif"));
++  aSans  ->Append (Font_FontAlias ("dejavu sans"));
+ #elif !defined(_WIN32) && !defined(__APPLE__) //X11
+   aSerif ->Append (Font_FontAlias ("times"));
+   aSans  ->Append (Font_FontAlias ("helvetica"));
+@@ -718,7 +736,7 @@
+ #else
+ 
+   NCollection_Map<TCollection_AsciiString> aMapOfFontsDirs;
+-#if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
++#if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__) && !defined(__HAIKU__)
+   if (FcConfig* aFcCfg = FcInitLoadConfig())
+   {
+     if (FcStrList* aFcFontDir = FcConfigGetFontDirs (aFcCfg))
+@@ -802,6 +820,18 @@
+   }
+ #endif
+ 
++#ifdef __HAIKU__
++  for (size_t anIter = 0; anIter < sizeof(Font_FontMgr_HaikuFontsDirs) / sizeof(Font_FontMgr_HaikuFontsDirs[0]); ++anIter)
++  {
++    char aDirPath[B_PATH_NAME_LENGTH];
++    if (find_directory (Font_FontMgr_HaikuFontsDirs[anIter], -1, false, aDirPath, sizeof(aDirPath)) == B_OK)
++    {
++      OSD_Path aPath (aDirPath);
++      addDirsRecursively (aPath, aMapOfFontsDirs);
++    }
++  }
++#endif
++
+   // append default directories
+   for (Standard_Integer anIter = 0; myDefaultFontsDirs[anIter] != NULL; ++anIter)
+   {
+@@ -821,7 +851,7 @@
+   for (NCollection_Map<TCollection_AsciiString>::Iterator anIter (aMapOfFontsDirs);
+        anIter.More(); anIter.Next())
+   {
+-  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
++  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__) && !defined(__HAIKU__)
+     OSD_File aReadFile (anIter.Value() + "/fonts.dir");
+     if (!aReadFile.Exists())
+     {
+@@ -841,7 +871,7 @@
+         RegisterFonts (aFonts, false);
+       }
+ 
+-  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
++  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__) && !defined(__HAIKU__)
+       continue;
+     }
+ 
+--- a/src/OSD/OSD_Path.cxx
++++ b/src/OSD/OSD_Path.cxx
+@@ -23,7 +23,7 @@
+ 
+ static OSD_SysType whereAmI()
+ {
+-#if defined(__digital__) || defined(__FreeBSD__) || defined(SUNOS) || defined(__APPLE__) || defined(__QNX__) || defined(__FreeBSD_kernel__)
++#if defined(__digital__) || defined(__FreeBSD__) || defined(SUNOS) || defined(__APPLE__) || defined(__QNX__) || defined(__FreeBSD_kernel__) || defined(__HAIKU__)
+   return OSD_UnixBSD;
+ #elif defined(sgi)  || defined(IRIX) || defined(__sun)  || defined(SOLARIS) ||  defined(__sco__) || defined(__hpux) || defined(HPUX)
+   return OSD_UnixSystemV;
+--- a/src/OSD/OSD_signal.cxx
++++ b/src/OSD/OSD_signal.cxx
+@@ -761,7 +761,7 @@
+ 
+ #include <signal.h>
+ 
+-#if !defined(__ANDROID__) && !defined(__QNX__) && !defined(__EMSCRIPTEN__)
++#if !defined(__ANDROID__) && !defined(__QNX__) && !defined(__EMSCRIPTEN__) && !defined(__HAIKU__)
+   #include <sys/signal.h>
+ #endif
+ 
+--- a/src/Standard/Standard_CLocaleSentry.hxx
++++ b/src/Standard/Standard_CLocaleSentry.hxx
+@@ -35,6 +35,11 @@
+     #define OCCT_CLOCALE_POSIX2008
+   #endif
+ 
++  //! Haiku has newlocale()/uselocale()/freelocale() in <locale.h> (and no strtod_l(), see Standard_CString.cxx).
++  #if defined(__HAIKU__)
++    #define OCCT_CLOCALE_POSIX2008
++  #endif
++
+   //! We check _GNU_SOURCE for glibc extensions here and it is always defined by g++ compiler.
+   #if defined(_GNU_SOURCE) && !defined(__ANDROID__)
+     #define OCCT_CLOCALE_POSIX2008
+--- a/src/Standard/Standard_CString.cxx
++++ b/src/Standard/Standard_CString.cxx
+@@ -77,6 +77,10 @@
+   // and newlocale/uselocale/freelocale to switch locale within current thread only.
+   // So we switch to C locale temporarily
+   #define SAVE_TL() Standard_CLocaleSentry aLocaleSentry;
++  #if defined(__HAIKU__)
++    // no strtod_l(): the sentry of SAVE_TL() has switched this thread to the "C" locale with uselocale()
++    #define strtod_l(thePtr, theNextPtr, theLocale)              strtod(thePtr, theNextPtr)
++  #endif
+   #ifndef OCCT_CLOCALE_POSIX2008
+     // glibc version for android platform use locale-independent implementation of
+     // strtod, strtol, strtoll functions. For other system with locale-depended
+--- a/src/Standard/Standard_StackTrace.cxx
++++ b/src/Standard/Standard_StackTrace.cxx
+@@ -29,6 +29,8 @@
+   //#include <unwind.h>
+ #elif defined(__QNX__)
+   //#include <backtrace.h> // requires linking to libbacktrace
++#elif defined(__HAIKU__)
++  // backtrace() is not part of the system (libexecinfo is an optional package)
+ #elif !defined(_WIN32) && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+   #include <execinfo.h>
+ #elif defined(_WIN32) && !defined(OCCT_UWP)
+@@ -203,7 +205,7 @@
+ #elif defined(__ANDROID__)
+   Message::SendTrace ("Standard::StackTrace() is not implemented for this platform");
+   return false;
+-#elif defined(__QNX__)
++#elif defined(__QNX__) || defined(__HAIKU__)
+   // bt_get_backtrace()
+   Message::SendTrace ("Standard::StackTrace() is not implemented for this platform");
+   return false;

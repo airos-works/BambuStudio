@@ -1,0 +1,53 @@
+Haiku support in oneTBB 2021.5.
+
+Haiku's compiler does not predefine __unix__, which oneTBB takes as "a POSIX
+system": the installed headers name Haiku next to it here; the library's own
+sources are compiled with -D__unix__ (tools/haiku/build-deps.sh), as they
+only use POSIX there (pthreads, semaphores, mmap, sysconf).
+
+There is no libdl on Haiku: link CMAKE_DL_LIBS, as the Clang rules do.
+
+--- a/cmake/compilers/GNU.cmake
++++ b/cmake/compilers/GNU.cmake
+@@ -41,7 +41,8 @@
+ endif()
+ 
+ if (NOT MINGW)
+-    set(TBB_COMMON_LINK_LIBS dl)
++    # dlopen() is in the C library on some systems (Haiku): as Clang.cmake does
++    set(TBB_COMMON_LINK_LIBS ${CMAKE_DL_LIBS})
+ endif()
+ 
+ # Ignore -Werror set through add_compile_options() or added to CMAKE_CXX_FLAGS if TBB_STRICT is disabled.
+--- a/include/oneapi/tbb/detail/_config.h
++++ b/include/oneapi/tbb/detail/_config.h
+@@ -268,7 +268,8 @@
+     #define __TBB_CPP20_COMPARISONS_PRESENT __TBB_CPP20_PRESENT
+ #endif
+ 
+-#define __TBB_RESUMABLE_TASKS                           (!__TBB_WIN8UI_SUPPORT && !__ANDROID__ && !__QNXNTO__)
++// Haiku has no makecontext()/swapcontext() for the coroutines behind them.
++#define __TBB_RESUMABLE_TASKS                           (!__TBB_WIN8UI_SUPPORT && !__ANDROID__ && !__QNXNTO__ && !__HAIKU__)
+ 
+ /* This macro marks incomplete code or comments describing ideas which are considered for the future.
+  * See also for plain comment with TODO and FIXME marks for small improvement opportunities.
+@@ -386,7 +387,7 @@
+ #endif
+ 
+ #if !defined(__TBB_SURVIVE_THREAD_SWITCH) && \
+-          (_WIN32 || _WIN64 || __APPLE__ || (__unix__ && !__ANDROID__))
++          (_WIN32 || _WIN64 || __APPLE__ || __HAIKU__ || (__unix__ && !__ANDROID__))
+     #define __TBB_SURVIVE_THREAD_SWITCH 1
+ #endif /* __TBB_SURVIVE_THREAD_SWITCH */
+ 
+--- a/include/oneapi/tbb/detail/_export.h
++++ b/include/oneapi/tbb/detail/_export.h
+@@ -19,7 +19,7 @@
+ 
+ #if defined(__MINGW32__)
+     #define _EXPORT __declspec(dllexport)
+-#elif defined(_WIN32) || defined(__unix__) || defined(__APPLE__) // Use .def files for these
++#elif defined(_WIN32) || defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__) // Use .def files for these
+     #define _EXPORT
+ #else
+     #error "Unknown platform/compiler"

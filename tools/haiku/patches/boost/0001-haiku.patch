@@ -1,0 +1,121 @@
+Haiku fixes for Boost 1.84 (after HaikuPorts' boost patches):
+
+- config: Haiku's compiler is a current GCC, not the GCC 2 the platform
+  header was written for; drop the BOOST_NO_CXX11_* overrides.
+- filesystem: struct dirent ends in a flexible array member.
+- process: the "still running" marker must be a stopped, not exited, not
+  signalled status in Haiku's own wait status encoding.
+- dll: program_location() from the team's application image (there is no
+  /proc/self/exe); no struct link_map behind a dlopen() handle.
+
+--- a/libs/config/include/boost/config/platform/haiku.hpp
++++ b/libs/config/include/boost/config/platform/haiku.hpp
+@@ -16,11 +16,6 @@
+ #  define BOOST_HAS_THREADS
+ #endif
+ 
+-#define BOOST_NO_CXX11_HDR_TYPE_TRAITS
+-#define BOOST_NO_CXX11_ATOMIC_SMART_PTR
+-#define BOOST_NO_CXX11_STATIC_ASSERT
+-#define BOOST_NO_CXX11_VARIADIC_MACROS
+-
+ //
+ // thread API's not auto detected:
+ //
+--- a/libs/process/include/boost/process/detail/posix/is_running.hpp
++++ b/libs/process/include/boost/process/detail/posix/is_running.hpp
+@@ -16,7 +16,13 @@
+ // Use the "stopped" state (WIFSTOPPED) to indicate "not terminated".
+ // This bit arrangement of status codes is not guaranteed by POSIX, but (according to comments in
+ // the glibc <bits/waitstatus.h> header) is the same across systems in practice.
++#if defined(__HAIKU__)
++// Haiku's wait status has the exit code in its low byte, the terminating signal in the second
++// and the stop signal in the third: "stopped by signal 1".
++constexpr int still_active = 0x010000;
++#else
+ constexpr int still_active = 0x017f;
++#endif
+ static_assert(WIFSTOPPED(still_active), "Expected still_active to indicate WIFSTOPPED");
+ static_assert(!WIFEXITED(still_active), "Expected still_active to not indicate WIFEXITED");
+ static_assert(!WIFSIGNALED(still_active), "Expected still_active to not indicate WIFSIGNALED");
+--- a/libs/filesystem/src/directory.cpp
++++ b/libs/filesystem/src/directory.cpp
+@@ -202,8 +202,10 @@
+ #endif
+     }
+ 
++#if !defined(__HAIKU__) // d_name is a flexible array member there
+     if ((max + 1) < sizeof(dirent().d_name))
+         max = sizeof(dirent().d_name) - 1;
++#endif
+ 
+     return max;
+ }
+@@ -365,7 +367,11 @@
+             // buffer that is enough for PATH_MAX as the directory name. Still, this doesn't guarantee there won't be
+             // a buffer overrun. The readdir_r API is fundamentally flawed and we should avoid it as much as possible
+             // in favor of readdir.
++#if defined(__HAIKU__)
++            extra_size = offsetof(dirent, d_name) + path_max() + 1u; // + 1 for "\0"
++#else
+             extra_size = (sizeof(dirent) - sizeof(dirent().d_name)) + path_max() + 1u; // + 1 for "\0"
++#endif
+         }
+     }
+ #endif // defined(BOOST_FILESYSTEM_USE_READDIR_R)
+--- a/libs/dll/include/boost/dll/detail/posix/program_location_impl.hpp
++++ b/libs/dll/include/boost/dll/detail/posix/program_location_impl.hpp
+@@ -42,6 +42,29 @@
+     }
+ }}} // namespace boost::dll::detail
+ 
++#elif BOOST_OS_HAIKU
++
++#include <image.h>
++namespace boost { namespace dll { namespace detail {
++    inline boost::dll::fs::path program_location_impl(boost::dll::fs::error_code& ec) {
++        ec.clear();
++
++        // The application's image of this team has the path it was loaded from.
++        image_info info;
++        int32 cookie = 0;
++        while (get_next_image_info(B_CURRENT_TEAM, &cookie, &info) == B_OK) {
++            if (info.type == B_APP_IMAGE) {
++                return boost::dll::fs::path(info.name);
++            }
++        }
++
++        ec = boost::dll::fs::make_error_code(
++            boost::dll::fs::errc::bad_file_descriptor
++        );
++        return boost::dll::fs::path();
++    }
++}}} // namespace boost::dll::detail
++
+ #elif BOOST_OS_SOLARIS
+ 
+ #include <stdlib.h>
+--- a/libs/dll/include/boost/dll/detail/posix/path_from_handle.hpp
++++ b/libs/dll/include/boost/dll/detail/posix/path_from_handle.hpp
+@@ -96,6 +96,21 @@
+ 
+ }}} // namespace boost::dll::detail
+ 
++#elif BOOST_OS_HAIKU
++
++namespace boost { namespace dll { namespace detail {
++
++    // A dlopen() handle is private to Haiku's runtime_loader: there is no
++    // link_map behind it and no call that gives its path.
++    inline boost::dll::fs::path path_from_handle(void* /*handle*/, boost::dll::fs::error_code &ec) {
++        ec = boost::dll::fs::make_error_code(
++            boost::dll::fs::errc::function_not_supported
++        );
++        return boost::dll::fs::path();
++    }
++
++}}} // namespace boost::dll::detail
++
+ #else // #if BOOST_OS_MACOS || BOOST_OS_IOS || BOOST_OS_ANDROID
+ 
+ // for dlinfo
