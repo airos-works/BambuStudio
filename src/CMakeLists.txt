@@ -17,6 +17,10 @@ add_subdirectory(semver)
 add_subdirectory(libigl)
 add_subdirectory(hints)
 add_subdirectory(mcut)
+if (HAIKU)
+    # stands in for OpenCV there
+    add_subdirectory(minicv)
+endif ()
 
 set(SLIC3R_HAS_OPENMESHCRAFT_BOOLEAN FALSE CACHE INTERNAL "")
 if(SLIC3R_ENABLE_OPENMESHCRAFT_BOOLEAN)
@@ -122,6 +126,30 @@ if (SLIC3R_GUI)
 endif()
 
 
+if (NOT SLIC3R_GUI)
+    # The command line mode of BambuStudio.cpp is part of the application: it
+    # lays the plates out and renders the thumbnails with the GUI library.
+    # Without the GUI only the headless slicer is built, on libslic3r alone.
+    # libslic3r's log sink encrypts with slic3r/Utils/BBLUtil.cpp and fetches
+    # its key with slic3r/Utils/Http.cpp; neither needs anything of the GUI.
+    add_executable(BambuStudio_headless BambuStudioHeadless.cpp
+        slic3r/Utils/BBLUtil.cpp slic3r/Utils/BBLUtil.hpp
+        slic3r/Utils/Http.cpp slic3r/Utils/Http.hpp)
+    set_target_properties(BambuStudio_headless PROPERTIES OUTPUT_NAME "bambu-studio-cli")
+    target_link_libraries(BambuStudio_headless libslic3r cereal libcurl OpenSSL::SSL OpenSSL::Crypto)
+    if (HAIKU)
+        target_link_libraries(BambuStudio_headless network)
+    elseif (NOT WIN32 AND NOT APPLE)
+        target_link_libraries(BambuStudio_headless ${CMAKE_DL_LIBS} Threads::Threads)
+    endif ()
+    add_custom_command(TARGET BambuStudio_headless POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E create_symlink "${SLIC3R_RESOURCES_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/../resources"
+        COMMENT "Symlinking the resources directory into the build tree"
+        VERBATIM)
+    install(TARGETS BambuStudio_headless RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    return()
+endif ()
+
 # Create a slic3r executable
 # Process manifests for various platforms.
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/platform/msw/BambuStudio.rc.in ${CMAKE_CURRENT_BINARY_DIR}/BambuStudio.rc @ONLY)
@@ -168,6 +196,12 @@ if (APPLE)
 elseif (MSVC)
     # Manifest is provided through BambuStudio.rc, don't generate your own.
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MANIFEST:NO")
+elseif (HAIKU)
+    # The Be API (application, interface, storage kits) and the sockets.
+    target_link_libraries(BambuStudio be network)
+    # platform/haiku/GLFW/glfw3.h: the off-screen context calls of the
+    # command line mode, without GLFW.
+    target_include_directories(BambuStudio PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/platform/haiku)
 else ()
     # Boost on Raspberry-Pi does not link to pthreads explicitly.
     target_link_libraries(BambuStudio ${CMAKE_DL_LIBS} -lstdc++ Threads::Threads pangoft2-1.0)
@@ -185,7 +219,7 @@ target_link_libraries(BambuStudio libslic3r_gui)
         target_link_libraries(BambuStudio ws2_32 uxtheme setupapi)
     elseif (APPLE)
         target_link_libraries(BambuStudio "-framework OpenGL")
-    else ()
+    elseif (NOT HAIKU) # dlopen() is in Haiku's libroot
         target_link_libraries(BambuStudio -ldl)
     endif ()
     #if (WIN32)
@@ -274,7 +308,7 @@ if (WIN32)
 
 
 else ()
-    if (NOT APPLE AND NOT FLATPAK)
+    if (NOT APPLE AND NOT FLATPAK AND NOT HAIKU) # Haiku: the system's FFmpeg
         set(output_sos_Release "")
         set(output_sos_Debug "")
         add_custom_target(BambuStudioSosCopy ALL DEPENDS BambuStudio)
