@@ -319,7 +319,13 @@ CheckboxFileDialog::CheckboxFileDialog(wxWindow *parent,
     const wxSize &size,
     const wxString &name
 )
+#if defined(__WXHAIKU__) && defined(wxHAS_GENERIC_FILEDIALOG)
+    // HAIKU-TODO(wx): the generic wxFileDialog the port has for now takes no name; remove with
+    // the native file dialog (WX-REQUESTS.md #8).
+    : wxFileDialog(parent, message, default_dir, default_file, wildcard, style, pos, size)
+#else
     : wxFileDialog(parent, message, default_dir, default_file, wildcard, style, pos, size, name)
+#endif
     , checkbox_label(checkbox_label)
 {
     if (checkbox_label.IsEmpty()) {

@@ -187,6 +187,12 @@ typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS2)(
     #include <gtk/gtk.h>
 #endif
 
+#ifdef __WXUNIVERSAL__
+// wxUniversal (the Haiku port): the theme to link, at the global scope. The rest of
+// IMPLEMENT_APP() is below, inside the namespace.
+wxIMPLEMENT_WX_THEME_SUPPORT
+#endif
+
 using namespace std::literals;
 namespace pt = boost::property_tree;
 
@@ -1515,7 +1521,13 @@ wxDEFINE_EVENT(EVT_ENTER_FORCE_UPGRADE, wxCommandEvent);
 wxDEFINE_EVENT(EVT_SHOW_NO_NEW_VERSION, wxCommandEvent);
 wxDEFINE_EVENT(EVT_SHOW_DIALOG, wxCommandEvent);
 wxDEFINE_EVENT(EVT_CONNECT_LAN_MODE_PRINT, wxCommandEvent);
+#ifdef __WXUNIVERSAL__
+// The theme of wxUniversal (the Haiku port) is linked through a symbol that IMPLEMENT_APP()
+// declares where it is used: that has to be the global scope (see the top of this file).
+IMPLEMENT_APP_NO_THEMES(GUI_App)
+#else
 IMPLEMENT_APP(GUI_App)
+#endif
 
 //BBS: remove GCodeViewer as seperate APP logic
 //GUI_App::GUI_App(EAppMode mode)
@@ -2574,7 +2586,9 @@ static LogEncOptions s_get_log_enc_opts()
 {
     LogEncOptions enc_options;
 
-#if BBL_RELEASE_TO_PUBLIC
+// Haiku: plain text logs. The encrypted ones can only be read by the vendor's support, which
+// does not exist for this system; here the log is for the user and the port's maintainers.
+#if BBL_RELEASE_TO_PUBLIC && !defined(__HAIKU__)
     std::string region_str;
     if (wxGetApp().app_config && !wxGetApp().app_config->get("region").empty()) {
         region_str = wxGetApp().app_config->get("region");
