@@ -1,0 +1,23 @@
+# Builds the air/OS packages (x86_64 and arm64) on every push to the airos
+# branch and publishes them to the rolling "latest" release; the air/OS
+# package pool takes them from there. The pipeline lives in
+# airos-works/airos-ci (apps/build-app-packages.sh, build_bambustudio), which
+# runs tools/haiku/build-deps.sh, build-wx.sh and build.sh --gui.
+name: air/OS build
+
+on:
+  push:
+    branches: [airos]
+  workflow_dispatch:
+
+jobs:
+  airos:
+    uses: airos-works/airos-ci/.github/workflows/app.yml@main
+    with:
+      app: bambustudio
+      repo-dir: bambustudio
+      publish-branch: airos
+      # the first build compiles Boost, OCCT, CGAL, TBB ... for both architectures
+      timeout-minutes: 420
+    permissions:
+      contents: write
