@@ -73,10 +73,11 @@ cp "$DIR/id_ed25519.pub" "$DIR/authorized_keys"
 # guest writes there is gone after a reboot. Everything that has to be there
 # at every boot is written here, into the image.
 #  - debug_server: crash reports on the Desktop instead of the debugger alert.
-#  - packages: without a Vulkan driver the image's Zink renderer add-on only
-#    stands in the way: it stays loaded beside the "Software Pipe" add-on,
-#    whose llvmpipe then does not come up, and OpenGL falls back to softpipe
-#    (seconds per frame). Blocked here unless BS_VM_KEEP_ZINK=1.
+#  - packages (only with BS_VM_BLOCK_ZINK=1): blocks the image's Zink renderer
+#    add-on. Do not: without a Vulkan driver that add-on is what renders, with
+#    its own softpipe (slow but stable). The "Software Pipe" add-on of
+#    mesa_swpipe, which takes over when Zink is blocked, crashes in the first
+#    frame of BambuStudio with llvmpipe and with softpipe (2026-11-13).
 mkdir -p "$DIR/guest"
 echo "default_action report" > "$DIR/guest/debug_server_settings"
 cat > "$DIR/guest/packages" <<'PKG'
@@ -96,7 +97,7 @@ PKG
 	echo "chmod 755 /myfs/home/config/settings/boot/UserBootscript"
 	echo "mkdir -p /myfs/home/config/settings/system/debug_server"
 	echo "cp :$DIR/guest/debug_server_settings /myfs/home/config/settings/system/debug_server/settings"
-	[[ ${BS_VM_KEEP_ZINK:-0} == 1 ]] || echo "cp :$DIR/guest/packages /myfs/system/settings/packages"
+	[[ ${BS_VM_BLOCK_ZINK:-0} != 1 ]] || echo "cp :$DIR/guest/packages /myfs/system/settings/packages"
 	echo "ls /myfs/home/config/settings"
 	echo "sync"
 	echo "quit"

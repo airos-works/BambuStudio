@@ -5,11 +5,11 @@
 # BS_RUN_WAIT: seconds to wait before printing the log (default 5).
 set -euo pipefail
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-# llvmpipe of the image (Mesa 22.0.5, LLVM 12) crashes in its generated code
-# with 256 bit vectors on this host: 128 bit ones unless the caller says
-# otherwise. (make-disk.sh blocks the Zink add-on, which otherwise leaves
-# OpenGL with softpipe and seconds per frame.)
-ENVS=(LP_NATIVE_VECTOR_WIDTH=128)
+# OpenGL in the guest is the image's default: without a Vulkan driver the
+# Zink add-on renders with its own softpipe: slow (seconds per frame at full
+# window size) but stable. There is no working llvmpipe in the image (see
+# make-disk.sh).
+ENVS=()
 while [[ $# -gt 0 && $1 != -- ]]; do ENVS+=("$1"); shift; done
 [[ ${1:-} == -- ]] && shift
 ARGS=""
@@ -22,4 +22,12 @@ for arg in "$@"; do ARGS+=" $(printf '%q' "$arg")"; done
 	for i in 1 2 3 4 5 6 7 8; do ps | grep -q "[b]in/bambu-studio" || break; sleep 1; done
 	if ps | grep -q "[b]in/bambu-studio"; then echo "run.sh: instance did not quit, killing it"; kill bambu-studio; sleep 2; fi
 fi'
-"$HERE/haiku.sh" "cd /Data/bambu && (env ${ENVS[*]:-} ./bin/bambu-studio$ARGS > run.log 2>&1 < /dev/null &); sleep ${BS_RUN_WAIT:-5}; tail -n ${BS_RUN_LINES:-40} run.log; ps | grep -c '[b]ambu-studio' | sed 's/^/running instances: /'"
+# Starts again when the application is gone after the wait (llvmpipe, see
+# above), BS_RUN_RETRIES times (default 0).
+for attempt in $(seq 0 "${BS_RUN_RETRIES:-0}"); do
+	"$HERE/haiku.sh" "cd /Data/bambu && (env ${ENVS[*]:-} ./bin/bambu-studio$ARGS > run.log 2>&1 < /dev/null &); sleep ${BS_RUN_WAIT:-5}; tail -n ${BS_RUN_LINES:-40} run.log; ps | grep -c '[b]in/bambu-studio' | sed 's/^/running instances: /'" | tee "${TMPDIR:-/tmp}/bs-run.$$"
+	if grep -q '^running instances: [1-9]' "${TMPDIR:-/tmp}/bs-run.$$"; then break; fi
+	echo "run.sh: the application is not running after ${BS_RUN_WAIT:-5} s (attempt $((attempt + 1)))"
+	"$HERE/haiku.sh" 'mkdir -p /Data/bambu/crashes; mv ~/Desktop/*.report /Data/bambu/crashes/ 2>/dev/null; true'
+done
+rm -f "${TMPDIR:-/tmp}/bs-run.$$"
