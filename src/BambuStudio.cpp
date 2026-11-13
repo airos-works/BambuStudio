@@ -70,6 +70,9 @@ using namespace nlohmann;
 #include "libslic3r/Orient.hpp"
 #include "libslic3r/PNGReadWrite.hpp"
 #include "libslic3r/ObjColorUtils.hpp"
+#ifdef __HAIKU__
+#include "libslic3r/HaikuUtils.hpp"
+#endif
 
 #include "BambuStudio.hpp"
 //BBS: add exception handler for win32
@@ -8889,6 +8892,10 @@ bool CLI::setup(int argc, char **argv)
     // The application is packed in the .zip archive in the root,
     // The resources are packed to 'resources' in the root.
     const boost::filesystem::path path_resources = install_path / "resources";
+#elif defined(__HAIKU__)
+    // "resources" beside the application (its folder, or the build tree), else in the data directory
+    // of the installation location the application's package is activated in.
+    const boost::filesystem::path path_resources = Slic3r::Haiku::resources_dir(SLIC3R_APP_KEY);
 #elif defined(SLIC3R_FHS)
     // The application is packaged according to the Linux Filesystem Hierarchy Standard
     // Resources are set to the 'Architecture-independent (shared) data', typically /usr/share or /usr/local/share
