@@ -612,6 +612,12 @@ if(MSVC AND NOT DEFINED OpenCV_ARCH)
     unset(_slic3r_gen_platform)
 endif()
 if (HAIKU)
+    # HaikuUtils.cpp defines a setlocale() that serializes the calls libstdc++
+    # makes from every thread: the linker must take it into every executable
+    # and keep it (--gc-sections), although nothing in the program refers to it.
+    target_link_options(libslic3r INTERFACE "LINKER:-u,setlocale")
+endif ()
+if (HAIKU)
     # OpenCV is not a dependency on Haiku: the few functions used (k-means
     # colour quantisation, colour conversions, texture decoding) are in
     # src/minicv, behind the same headers and names.
