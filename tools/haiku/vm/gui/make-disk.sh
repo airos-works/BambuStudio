@@ -69,6 +69,23 @@ cat >> "$DIR/UserBootscript" <<'BOOT'
 mountvolume Data >/dev/null 2>&1
 BOOT
 cp "$DIR/id_ed25519.pub" "$DIR/authorized_keys"
+# The boot volume of the image is used through a write overlay: what the
+# guest writes there is gone after a reboot. Everything that has to be there
+# at every boot is written here, into the image.
+#  - debug_server: crash reports on the Desktop instead of the debugger alert.
+#  - packages: without a Vulkan driver the image's Zink renderer add-on only
+#    stands in the way: it stays loaded beside the "Software Pipe" add-on,
+#    whose llvmpipe then does not come up, and OpenGL falls back to softpipe
+#    (seconds per frame). Blocked here unless BS_VM_KEEP_ZINK=1.
+mkdir -p "$DIR/guest"
+echo "default_action report" > "$DIR/guest/debug_server_settings"
+cat > "$DIR/guest/packages" <<'PKG'
+Package airos_payload {
+	BlockedEntries {
+		data/airos/non-packaged/add-ons/opengl-zink/Zink
+	}
+}
+PKG
 {
 	echo "mkdir -p /myfs/home/config/settings/ssh"
 	echo "cp :$DIR/authorized_keys /myfs/home/config/settings/ssh/authorized_keys"
@@ -77,6 +94,9 @@ cp "$DIR/id_ed25519.pub" "$DIR/authorized_keys"
 	echo "mkdir -p /myfs/home/config/settings/boot"
 	echo "cp :$DIR/UserBootscript /myfs/home/config/settings/boot/UserBootscript"
 	echo "chmod 755 /myfs/home/config/settings/boot/UserBootscript"
+	echo "mkdir -p /myfs/home/config/settings/system/debug_server"
+	echo "cp :$DIR/guest/debug_server_settings /myfs/home/config/settings/system/debug_server/settings"
+	[[ ${BS_VM_KEEP_ZINK:-0} == 1 ]] || echo "cp :$DIR/guest/packages /myfs/system/settings/packages"
 	echo "ls /myfs/home/config/settings"
 	echo "sync"
 	echo "quit"
