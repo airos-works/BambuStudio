@@ -1324,8 +1324,12 @@ void GUI_App::post_init()
             BOOST_LOG_TRIVIAL(warning) << "Found glcontext not ready, postpone the init";
         }
 //#endif
+#ifndef __WXHAIKU__
+        // Haiku starts on the Prepare tab: the Home tab is three web pages,
+        // which are loaded when the user goes there (WebViewPanel).
         if (is_editor())
             mainframe->select_tab(size_t(0));
+#endif
         mainframe->Thaw();
         BOOST_LOG_TRIVIAL(info) << "end load_gl_resources";
     }

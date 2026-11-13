@@ -1550,6 +1550,16 @@ void MainFrame::init_tabpanel()
             m_web_device->NavigateTo("/filament_manager", /*re_init=*/true);
 #endif
         }
+#ifdef __WXHAIKU__
+        // The pages of the Home tab are loaded when the tab is first shown to
+        // the user (not for the selection made while the window is built).
+        if (panel == m_webview && m_webview != nullptr && IsShown() && wxGetApp().initialized())
+            m_webview->load_deferred_pages();
+        // As on macOS below, for another reason: a hidden page is a web process
+        // kept for nothing; a blank view gives its engine back.
+        if (m_web_device && panel != m_web_device)
+            m_web_device->Suspend();
+#endif
 #if defined(__WXOSX__)
         // macOS root cause fix: suspend the Filament Manager WKWebView whenever it
         // is not the visible tab. Its live React SPA, if left mounted in a hidden
