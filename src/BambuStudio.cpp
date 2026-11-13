@@ -8907,13 +8907,6 @@ bool CLI::setup(int argc, char **argv)
     // The application is packaged according to the Linux Filesystem Hierarchy Standard
     // Resources are set to the 'Architecture-independent (shared) data', typically /usr/share or /usr/local/share
     const boost::filesystem::path path_resources = SLIC3R_FHS_RESOURCES;
-#elif defined(__HAIKU__)
-    // Haiku: "resources" beside the binary or its directory (the application folder, a build
-    // tree), else data/BambuStudio/resources of the installation location the package is
-    // activated in (/boot/system, ~/config).
-    std::string haiku_resources = Slic3r::Haiku::resources_dir(SLIC3R_APP_KEY);
-    install_path = install_path.parent_path();
-    const boost::filesystem::path path_resources = haiku_resources.empty() ? install_path / "resources" : boost::filesystem::path(haiku_resources);
 #else
     // The application is packed in the .tar.bz archive (or in AppImage) as 'bin/bambu-studio',
     // The resources are packed to 'resources' in the root.

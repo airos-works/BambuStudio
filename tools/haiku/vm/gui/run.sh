@@ -20,8 +20,8 @@ for arg in "$@"; do ARGS+=" $(printf '%q' "$arg")"; done
 "$HERE/haiku.sh" 'if ps | grep -q "[b]in/bambu-studio"; then
 	hey application/x-vnd.airos-BambuStudio quit > /dev/null 2>&1 &
 	for i in 1 2 3 4 5 6 7 8; do ps | grep -q "[b]in/bambu-studio" || break; sleep 1; done
-	if ps | grep -q "[b]in/bambu-studio"; then echo "run.sh: instance did not quit, killing it"; kill bambu-studio; sleep 2; fi
-fi'
+	if ps | grep -q "[b]in/bambu-studio"; then echo "run.sh: the running instance did not quit (a dialog is open?)"; exit 3; fi
+fi' || { [[ ${BS_RUN_KILL:-0} == 1 ]] || { echo "run.sh: answer its dialog, or BS_RUN_KILL=1 to kill it (has crashed the app_server)" >&2; exit 3; }; "$HERE/haiku.sh" 'kill bambu-studio; sleep 2'; }
 # Starts again when the application is gone after the wait (llvmpipe, see
 # above), BS_RUN_RETRIES times (default 0).
 for attempt in $(seq 0 "${BS_RUN_RETRIES:-0}"); do
