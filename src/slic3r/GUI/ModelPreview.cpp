@@ -188,16 +188,7 @@ ModelPreview::ModelPreview(wxWindow *parent) : wxWindow(parent, wxID_ANY), m_cam
     m_canvas->EnableTouchEvents(wxTOUCH_ZOOM_GESTURE);
 }
 
-#ifdef __WXHAIKU__
-ModelPreview::~ModelPreview()
-{
-    // a context per canvas there: this one's frame buffers go with it
-    if (const auto& p_ogl_manager = wxGetApp().get_opengl_manager())
-        p_ogl_manager->forget_canvas(m_canvas);
-}
-#else
 ModelPreview::~ModelPreview() = default; // m_ctx is the app's shared context — not owned
-#endif // __WXHAIKU__
 
 void ModelPreview::set_scene(std::shared_ptr<PreviewScene> scene, bool reframe)
 {
@@ -224,10 +215,6 @@ void ModelPreview::on_paint()
     if (!m_canvas || !m_canvas->IsShownOnScreen()) return;
     wxPaintDC dc(m_canvas);
     m_canvas->SetCurrent(*m_ctx);
-#ifdef __WXHAIKU__
-    // a context per canvas there: the manager switches to this canvas' frame buffers
-    wxGetApp().get_opengl_manager()->set_current_canvas(m_canvas);
-#endif // __WXHAIKU__
 
     // Clear any error already queued in the borrowed context so the glsafe checks flag only our calls.
     for (int i = 0; i < 64 && ::glGetError() != GL_NO_ERROR; ++i) {}

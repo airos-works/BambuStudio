@@ -1619,11 +1619,6 @@ GLCanvas3D::GLCanvas3D(wxGLCanvas* canvas, Bed3D &bed)
 
 GLCanvas3D::~GLCanvas3D()
 {
-#ifdef __WXHAIKU__
-    // a context per canvas there: this one's frame buffers go with it
-    if (const auto& p_ogl_manager = wxGetApp().get_opengl_manager())
-        p_ogl_manager->forget_canvas(m_canvas);
-#endif // __WXHAIKU__
     reset_volumes(false);
 
     m_sel_plate_toolbar.del_all_item();
@@ -8630,10 +8625,6 @@ bool GLCanvas3D::_set_current(bool force_update)
         const auto rt = m_canvas->SetCurrent(*m_context);
         if (rt) {
             m_dirty_context = false;
-#ifdef __WXHAIKU__
-            // a context per canvas there: the manager switches to this canvas' frame buffers
-            wxGetApp().get_opengl_manager()->set_current_canvas(m_canvas);
-#endif // __WXHAIKU__
         }
         return rt;
     }

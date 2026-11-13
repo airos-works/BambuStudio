@@ -7,7 +7,6 @@
 #include <memory>
 #include <unordered_map>
 #include <string>
-#include <vector>
 
 class wxWindow;
 class wxGLCanvas;
@@ -230,27 +229,6 @@ private:
     bool m_b_gizmo_keep_screen_size_enabled{ true };
     bool m_b_advanced_gcode_viewer_enabled{ true };
     uint8_t m_toolbar_rendering_style{ 0 };
-#ifdef __WXHAIKU__
-    // On Haiku every wxGLCanvas renders with an OpenGL context of its own: the GL kit ties one
-    // to each BGLView, and the wxGLContext of the wx port only stands for their share group.
-    // Textures, buffers and programs are common to all canvases. What OpenGL keeps per context
-    // is kept per canvas here and swapped in by set_current_canvas(): the vertex array object,
-    // the frame buffer objects and the viewport size they were made for.
-    struct CanvasState
-    {
-        std::unordered_map<std::string, std::shared_ptr<FrameBuffer>> name_to_framebuffer;
-        std::weak_ptr<FrameBuffer> current_binded_framebuffer;
-        uint32_t vao{ 0 };
-        uint32_t viewport_width{ 0 };
-        uint32_t viewport_height{ 0 };
-        bool     viewport_dirty{ true };
-    };
-    std::unordered_map<const wxGLCanvas*, CanvasState> m_canvas_states;
-    std::vector<std::shared_ptr<FrameBuffer>> m_orphaned_framebuffers;
-    const wxGLCanvas* m_current_canvas{ nullptr };
-    void store_canvas_state(CanvasState& state);
-    void load_canvas_state(CanvasState& state);
-#endif // __WXHAIKU__
     static GLInfo s_gl_info;
 #ifdef __APPLE__
     // Part of hack to remove crash when closing the application on OSX 10.9.5 when building against newer wxWidgets
@@ -270,13 +248,6 @@ public:
 
     bool init_gl(bool popup_error = true);
     wxGLContext* init_glcontext(wxGLCanvas& canvas);
-#ifdef __WXHAIKU__
-    // To be called after wxGLCanvas::SetCurrent() of the application's context succeeded: makes
-    // the per-context objects of this canvas the ones this manager works with.
-    void set_current_canvas(const wxGLCanvas* canvas);
-    // To be called before a canvas is destroyed: releases its per-context objects.
-    void forget_canvas(const wxGLCanvas* canvas);
-#endif // __WXHAIKU__
 
     const std::shared_ptr<GLShaderProgram>& get_shader(const std::string& shader_name) const { return m_shaders_manager.get_shader(shader_name); }
     std::shared_ptr<GLShaderProgram> get_current_shader() const { return m_shaders_manager.get_current_shader(); }
