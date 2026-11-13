@@ -45,6 +45,9 @@
 
 #if !defined(_WIN32)
 #include <dirent.h>
+#ifdef __HAIKU__
+#include <sys/stat.h>
+#endif
 #include "src/SparseExtra/MatrixMarketIterator.h"
 #endif
 

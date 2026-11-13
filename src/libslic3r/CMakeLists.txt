@@ -532,6 +532,13 @@ if (APPLE)
         )
 endif ()
 
+if (HAIKU)
+    list(APPEND lisbslic3r_sources
+            HaikuUtils.cpp
+            HaikuUtils.hpp
+        )
+endif ()
+
 add_library(libslic3r STATIC ${lisbslic3r_sources}
     "${CMAKE_CURRENT_BINARY_DIR}/libslic3r_version.h"
     ${OpenVDBUtils_SOURCES})
@@ -600,7 +607,15 @@ if(MSVC AND NOT DEFINED OpenCV_ARCH)
     endif()
     unset(_slic3r_gen_platform)
 endif()
-find_package(OpenCV REQUIRED core)
+if (HAIKU)
+    # OpenCV is not a dependency on Haiku: the few functions used (k-means
+    # colour quantisation, colour conversions, texture decoding) are in
+    # src/minicv, behind the same headers and names.
+    set(SLIC3R_OPENCV_LIBRARY minicv)
+else ()
+    find_package(OpenCV REQUIRED core)
+    set(SLIC3R_OPENCV_LIBRARY opencv_world)
+endif ()
 find_package(assimp REQUIRED)
 cmake_policy(POP)
 
@@ -766,7 +781,7 @@ target_link_libraries(libslic3r
     ${OCCT_LIBS}
     Clipper2
     mcut
-    opencv_world
+    ${SLIC3R_OPENCV_LIBRARY}
     ${_cgal_tgt}
     assimp::assimp
     )
@@ -774,7 +789,7 @@ target_link_libraries(libslic3r
 if(NOT WIN32)
     find_package(Freetype REQUIRED)
     target_link_libraries(libslic3r Freetype::Freetype)
-    if (NOT APPLE)
+    if (NOT APPLE AND NOT HAIKU)
         target_link_libraries(libslic3r fontconfig)
     endif()
 endif()
@@ -787,6 +802,8 @@ endif ()
 
 if (TARGET OpenVDB::openvdb)
     target_link_libraries(libslic3r OpenVDB::openvdb)
+    # SLA/Hollowing.cpp: without it nothing is hollowed (SLIC3R_OPENVDB=OFF)
+    target_compile_definitions(libslic3r PRIVATE SLIC3R_OPENVDB)
 endif()
 
 if(WIN32)

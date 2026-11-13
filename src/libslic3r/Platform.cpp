@@ -86,6 +86,10 @@ void detect_platform()
     BOOST_LOG_TRIVIAL(info) << "Platform: OpenBSD";
 	s_platform 		  = Platform::BSDUnix;
 	s_platform_flavor = PlatformFlavor::OpenBSD;
+#elif defined(__HAIKU__)
+    BOOST_LOG_TRIVIAL(info) << "Platform: Haiku";
+	s_platform 		  = Platform::Haiku;
+	s_platform_flavor = PlatformFlavor::GenericHaiku;
 #else
 	// This should not happen.
     BOOST_LOG_TRIVIAL(info) << "Platform: Unknown";
@@ -116,6 +120,7 @@ std::string platform_to_string(Platform platform)
         case Platform::OSX          : return "OSX";
         case Platform::Linux        : return "Linux";
         case Platform::BSDUnix      : return "BSDUnix";
+        case Platform::Haiku        : return "Haiku";
     }
     assert(false);
     return "";
@@ -137,6 +142,7 @@ std::string platform_flavor_to_string(PlatformFlavor pf)
         case PlatformFlavor::GenericOSX      : return "GenericOSX";
         case PlatformFlavor::OSXOnX86        : return "OSXOnX86";
         case PlatformFlavor::OSXOnArm        : return "OSXOnArm";
+        case PlatformFlavor::GenericHaiku    : return "GenericHaiku";
     }
     assert(false);
     return "";

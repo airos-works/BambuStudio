@@ -13,6 +13,7 @@ enum class Platform
 	OSX,
 	Linux,
 	BSDUnix,
+	Haiku,
 };
 
 enum class PlatformFlavor
@@ -28,6 +29,7 @@ enum class PlatformFlavor
     GenericOSX,      // For Platform::OSX
     OSXOnX86,        // For Apple's on Intel X86 CPU
     OSXOnArm,        // For Apple's on Arm CPU
+    GenericHaiku,    // For Platform::Haiku
 };
 
 // To be called on program start-up.

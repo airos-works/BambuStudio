@@ -5,6 +5,9 @@
 	// any posix system
 	#include <pthread.h>
 #endif
+#ifdef __HAIKU__
+	#include <OS.h>
+#endif
 
 #include <atomic>
 #include <condition_variable>
@@ -156,6 +159,32 @@ std::optional<std::string> get_current_thread_name()
 	return std::nullopt;
 }
 
+#elif defined(__HAIKU__)
+
+// The kernel kit names threads (up to B_OS_NAME_LENGTH bytes).
+bool set_thread_name(std::thread &thread, const char *thread_name)
+{
+	return rename_thread(get_pthread_thread_id(thread.native_handle()), thread_name) == B_OK;
+}
+
+bool set_thread_name(boost::thread &thread, const char *thread_name)
+{
+	return rename_thread(get_pthread_thread_id(thread.native_handle()), thread_name) == B_OK;
+}
+
+bool set_current_thread_name(const char *thread_name)
+{
+	return rename_thread(find_thread(nullptr), thread_name) == B_OK;
+}
+
+std::optional<std::string> get_current_thread_name()
+{
+	thread_info info;
+	if (get_thread_info(find_thread(nullptr), &info) != B_OK)
+		return std::nullopt;
+	return std::string(info.name);
+}
+
 #else
 
 // posix
@@ -262,7 +291,7 @@ void name_tbb_thread_pool_threads_set_locale()
 				// We are leaking some memory here, because the newlocale() produced memory will never be released.
 				// This is not a problem though, as there will be a maximum one worker thread created per physical thread.
 				uselocale(newlocale(
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__HAIKU__)
 					LC_ALL_MASK
 #else // some Unix / Linux / BSD
 					LC_ALL

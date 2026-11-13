@@ -566,8 +566,8 @@ else()
 endif()
 
 if (SLIC3R_STATIC AND NOT SLIC3R_STATIC_EXCLUDE_CURL)
-    if (NOT APPLE)
-        # libcurl is always linked dynamically to the system libcurl on OSX.
+    if (NOT APPLE AND NOT HAIKU)
+        # libcurl is always linked dynamically to the system libcurl on OSX and Haiku.
         # On other systems, libcurl is linked statically if SLIC3R_STATIC is set.
         target_compile_definitions(libcurl INTERFACE CURL_STATICLIB)
     endif()
@@ -612,18 +612,25 @@ endif ()
 
 find_package(PNG REQUIRED)
 
-set(OpenGL_GL_PREFERENCE "LEGACY")
-find_package(OpenGL REQUIRED)
+# The headless build for Haiku (SLIC3R_GUI=OFF) renders nothing.
+if (SLIC3R_GUI OR NOT HAIKU)
+    set(OpenGL_GL_PREFERENCE "LEGACY")
+    find_package(OpenGL REQUIRED)
 
-# Find glew or use bundled version
-if (SLIC3R_STATIC AND NOT SLIC3R_STATIC_EXCLUDE_GLEW)
-    set(GLEW_USE_STATIC_LIBS ON)
-    set(GLEW_VERBOSE ON)
-endif()
+    # Find glew or use bundled version
+    if (SLIC3R_STATIC AND NOT SLIC3R_STATIC_EXCLUDE_GLEW)
+        set(GLEW_USE_STATIC_LIBS ON)
+        set(GLEW_VERBOSE ON)
+    endif()
 
-find_package(GLEW REQUIRED)
+    find_package(GLEW REQUIRED)
+endif ()
 
-find_package(glfw3 REQUIRED)
+# GLFW only makes the off-screen OpenGL context of the command line slicer's
+# thumbnails. On Haiku the Be API does that (BGLView), GLFW has no port.
+if (NOT HAIKU)
+    find_package(glfw3 REQUIRED)
+endif ()
 
 # Find the Cereal serialization library
 find_package(cereal REQUIRED)
@@ -686,14 +693,26 @@ if(SLIC3R_STATIC)
     set(USE_BLOSC TRUE)
 endif ()
 
-find_package(OpenVDB 5.0 COMPONENTS openvdb)
-if(OpenVDB_FOUND)
-    slic3r_remap_configs(IlmBase::Half RelWithDebInfo Release)
-    slic3r_remap_configs(Blosc::blosc RelWithDebInfo Release)
+# OpenVDB (with Blosc and OpenEXR's Half) only serves the hollowing of SLA
+# prints, which no supported printer uses. It is not a dependency on Haiku:
+# libslic3r builds SLA/HollowingStub.cpp there instead.
+if (HAIKU)
+    set(SLIC3R_OPENVDB_INITIAL OFF)
 else ()
-    message(FATAL_ERROR "OpenVDB could not be found with the bundled find module. "
-                   "You can try to specify the find module location of your "
-                   "OpenVDB installation with the OPENVDB_FIND_MODULE_PATH cache variable.")
+    set(SLIC3R_OPENVDB_INITIAL ON)
+endif ()
+option(SLIC3R_OPENVDB "Use OpenVDB (hollowing of SLA prints)" ${SLIC3R_OPENVDB_INITIAL})
+
+if (SLIC3R_OPENVDB)
+    find_package(OpenVDB 5.0 COMPONENTS openvdb)
+    if(OpenVDB_FOUND)
+        slic3r_remap_configs(IlmBase::Half RelWithDebInfo Release)
+        slic3r_remap_configs(Blosc::blosc RelWithDebInfo Release)
+    else ()
+        message(FATAL_ERROR "OpenVDB could not be found with the bundled find module. "
+                       "You can try to specify the find module location of your "
+                       "OpenVDB installation with the OPENVDB_FIND_MODULE_PATH cache variable.")
+    endif ()
 endif ()
 
 

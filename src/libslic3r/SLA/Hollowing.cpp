@@ -1,7 +1,11 @@
 #include <functional>
 #include <optional>
 
+// Without OpenVDB (SLIC3R_OPENVDB undefined) no interior is ever generated:
+// generate_interior() returns null and the drain holes still work.
+#ifdef SLIC3R_OPENVDB
 #include <libslic3r/OpenVDBUtils.hpp>
+#endif
 #include <libslic3r/TriangleMesh.hpp>
 #include <libslic3r/TriangleMeshSlicer.hpp>
 #include <libslic3r/SLA/Hollowing.hpp>
@@ -23,8 +27,10 @@ namespace sla {
 
 struct Interior {
     indexed_triangle_set mesh;
+#ifdef SLIC3R_OPENVDB
     openvdb::FloatGrid::Ptr gridptr;
     mutable std::optional<openvdb::FloatGrid::ConstAccessor> accessor;
+#endif
 
     double closing_distance = 0.;
     double thickness = 0.;
@@ -33,12 +39,14 @@ struct Interior {
     double nb_out = 3.; // narrow band width outwards
     // Full narrow band is the sum of the two above values.
 
+#ifdef SLIC3R_OPENVDB
     void reset_accessor() const  // This resets the accessor and its cache
     // Not a thread safe call!
     {
         if (gridptr)
             accessor = gridptr->getConstAccessor();
     }
+#endif
 };
 
 void InteriorDeleter::operator()(Interior *p)
@@ -56,6 +64,7 @@ const indexed_triangle_set &get_mesh(const Interior &interior)
     return interior.mesh;
 }
 
+#ifdef SLIC3R_OPENVDB
 static InteriorPtr generate_interior_verbose(const TriangleMesh & mesh,
                                              const JobController &ctl,
                                              double min_thickness,
@@ -145,6 +154,13 @@ InteriorPtr generate_interior(const TriangleMesh &   mesh,
 
     return interior;
 }
+#else // SLIC3R_OPENVDB
+InteriorPtr generate_interior(const TriangleMesh &, const HollowingConfig &, const JobController &)
+{
+    BOOST_LOG_TRIVIAL(error) << "Hollowing is not available: built without OpenVDB";
+    return {};
+}
+#endif // SLIC3R_OPENVDB
 
 indexed_triangle_set DrainHole::to_mesh() const
 {
@@ -312,12 +328,15 @@ void hollow_mesh(TriangleMesh &mesh, const Interior &interior, int flags)
 {
     if (mesh.empty() || interior.mesh.empty()) return;
 
+#ifdef SLIC3R_OPENVDB
     if (flags & hfRemoveInsideTriangles && interior.gridptr)
         remove_inside_triangles(mesh, interior);
+#endif
 
     mesh.merge(TriangleMesh{interior.mesh});
 }
 
+#ifdef SLIC3R_OPENVDB
 // Get the distance of p to the interior's zero iso_surface. Interior should
 // have its zero isosurface positioned at offset + closing_distance inwards form
 // the model surface.
@@ -558,5 +577,16 @@ void remove_inside_triangles(TriangleMesh &mesh, const Interior &interior,
     mesh = TriangleMesh{mesh.its};
     //FIXME do we want to repair the mesh? Are there duplicate vertices or flipped triangles?
 }
+
+#else // SLIC3R_OPENVDB
+double get_distance(const Vec3f &, const Interior &)
+{
+    return std::nan("");
+}
+
+void remove_inside_triangles(TriangleMesh &, const Interior &, const std::vector<bool> &)
+{
+}
+#endif // SLIC3R_OPENVDB
 
 }} // namespace Slic3r::sla

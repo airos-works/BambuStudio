@@ -16,6 +16,9 @@
 #ifdef __APPLE__
 #include "MacUtils.hpp"
 #endif
+#ifdef __HAIKU__
+#include "HaikuUtils.hpp"
+#endif
 
 #ifdef WIN32
 	#include <windows.h>
@@ -40,6 +43,9 @@
 		#include <sys/sendfile.h>
 		#include <dirent.h>
 		#include <stdio.h>
+	#endif
+	#ifdef __HAIKU__
+		#include <sys/stat.h>
 	#endif
 #endif
 
@@ -956,6 +962,15 @@ const UserPathLayout &user_path_layout()
         const size_t suffix_len = BBL_INTERNAL_TESTING == 1 ? strlen("/Library/Application Support/BambuStudioInternal/user") :
                                                               strlen("/Library/Application Support/BambuStudioBeta/user");
     #endif
+#elif defined(__HAIKU__)
+        // <home>/config/settings/<application>: Haiku::user_settings_dir()
+        const char *env = std::getenv("HOME");
+    #if BBL_RELEASE_TO_PUBLIC
+        const size_t suffix_len = strlen("/config/settings/BambuStudio/user");
+    #else
+        const size_t suffix_len = BBL_INTERNAL_TESTING == 1 ? strlen("/config/settings/BambuStudioInternal/user") :
+                                                              strlen("/config/settings/BambuStudioBeta/user");
+    #endif
 #else
         const char *env = std::getenv("HOME");
     #if BBL_RELEASE_TO_PUBLIC
@@ -1190,6 +1205,8 @@ std::string get_process_name(int pid)
 	char* p = pathbuf;
 	while (auto q = strchr(p + 1, '/')) p = q;
 	return p;
+#elif defined(__HAIKU__)
+    return Haiku::team_name(pid);
 #else
     char pathbuf[512]  = {0};
     char proc_path[32] = "/proc/self/exe";
@@ -1399,6 +1416,9 @@ std::string log_memory_info(bool ignore_loglevel)
         }
         else
             out += "N/A";
+#elif defined(__HAIKU__)
+        // The RAM behind the team's areas; the kernel keeps no peak value.
+        out += " Resident memory: " + format_memsize_MB(Haiku::resident_memory());
 #endif
     }
     return out;
@@ -1419,6 +1439,13 @@ double get_peak_rss_mb()
 #endif
         return static_cast<double>(peak_rss) / (1024.0 * 1024.0);
     }
+#elif defined(__HAIKU__)
+    // No peak accounting in the kernel: the highest value seen by this function.
+    static std::atomic<size_t> s_peak { 0 };
+    const size_t now  = Haiku::resident_memory();
+    size_t       peak = s_peak.load();
+    while (now > peak && !s_peak.compare_exchange_weak(peak, now)) ;
+    return static_cast<double>(std::max(now, peak)) / (1024.0 * 1024.0);
 #endif
     return 0.0;
 }
@@ -1441,6 +1468,8 @@ size_t total_physical_memory()
 	status.dwLength = sizeof(status);
 	GlobalMemoryStatusEx( &status );
 	return (size_t)status.ullTotalPhys;
+#elif defined(__HAIKU__)
+	return Haiku::physical_memory();
 #elif defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__))
 	// UNIX variants. -------------------------------------------
 	// Prefer sysctl() over sysconf() except sysctl() HW_REALMEM and HW_PHYSMEM
@@ -1503,6 +1532,10 @@ bool makedir(const std::string path) {
 	if (opendir(path.c_str()) == NULL) {
 		return mkdir(path.c_str(), 0777) == 0;
 	}
+#elif defined(__HAIKU__)
+	struct stat st;
+	if (stat(path.c_str(), &st) != 0)
+		return mkdir(path.c_str(), 0777) == 0;
 #else  // I don't know how to make dir on Mac...
 #endif
 	return true;  // dir already exists
