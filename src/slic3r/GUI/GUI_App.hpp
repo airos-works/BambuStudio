@@ -757,10 +757,14 @@ public:
     bool            open_browser_with_warning_dialog(const wxString& url, int flags = 0);
 #ifdef __APPLE__
     void            OSXStoreOpenFiles(const wxArrayString &files);
+#endif /* __APPLE */
+#if defined(__APPLE__) || defined(__WXHAIKU__)
     // wxWidgets override to get an event on open files.
+    // Haiku: the files Tracker opens with the application (B_REFS_RECEIVED) and the arguments of
+    // a second launch (B_ARGV_RECEIVED), which the wx port reports through the same hooks.
     void            MacOpenFiles(const wxArrayString &fileNames) override;
     void            MacOpenURL(const wxString& url) override;
-#endif /* __APPLE */
+#endif /* __APPLE__ || __WXHAIKU__ */
 
     Sidebar&             sidebar();
     GizmoObjectManipulation *obj_manipul();

@@ -70,6 +70,9 @@
 #include <wx/glcanvas.h>
 
 #include "libslic3r/Utils.hpp"
+#ifdef __HAIKU__
+#include "libslic3r/HaikuUtils.hpp"
+#endif
 #include "libslic3r/Debounce.hpp"
 #include "libslic3r/Model.hpp"
 #include "libslic3r/I18N.hpp"
@@ -2649,7 +2652,10 @@ void GUI_App::init_app_config()
 	// Mac : "~/Library/Application Support/Slic3r"
 
     if (data_dir().empty()) {
-        #ifndef __linux__
+        #if defined(__HAIKU__)
+            // The user settings directory (~/config/settings/BambuStudio), as the command line slicer.
+            std::string data_dir = Slic3r::Haiku::user_settings_dir(into_u8(GetAppName()));
+        #elif !defined(__linux__)
             std::string data_dir = wxStandardPaths::Get().GetUserDataDir().ToUTF8().data();
         #else
             // Since version 2.3, config dir on Linux is in ${XDG_CONFIG_HOME}.
@@ -2769,7 +2775,8 @@ std::map<std::string, std::string> GUI_App::get_extra_header()
 #endif
 #elif defined(__APPLE__)
     extra_headers.insert(std::make_pair("X-BBL-OS-Type", "macos"));
-#elif defined(__LINUX__)
+#elif defined(__LINUX__) || defined(__HAIKU__)
+    // Haiku: the services know no such system; "linux" is the nearest they answer.
     extra_headers.insert(std::make_pair("X-BBL-OS-Type", "linux"));
 #endif
     int major = 0, minor = 0, micro = 0;
@@ -4571,6 +4578,12 @@ void GUI_App::ShowUserGuide() {
 
 void GUI_App::ShowDownNetPluginDlg(bool post_login)
 {
+#ifdef __HAIKU__
+    // There is no network plug-in for Haiku: nothing to download.
+    (void) post_login;
+    BOOST_LOG_TRIVIAL(info) << "network plug-in download requested: not available on Haiku";
+    return;
+#endif
     try {
         auto iter = std::find_if(dialogStack.begin(), dialogStack.end(), [](auto dialog) {
             return dynamic_cast<DownloadProgressDialog *>(dialog) != nullptr;
@@ -6221,6 +6234,12 @@ bool GUI_App::check_send_print_version_policy()
 
 void GUI_App::check_new_version(bool show_tips, int by_user)
 {
+#ifdef __HAIKU__
+    // The update service only knows the Windows, macOS and Linux builds; the air/OS package is
+    // updated by the system's package management.
+    (void) show_tips; (void) by_user;
+    return;
+#endif
     std::string platform = "windows";
 
 #ifdef __WINDOWS__
@@ -8280,7 +8299,9 @@ void GUI_App::OSXStoreOpenFiles(const wxArrayString &fileNames)
     }*/
     wxApp::OSXStoreOpenFiles(fileNames);
 }
+#endif /* __APPLE__ */
 
+#if defined(__APPLE__) || defined(__WXHAIKU__)
 void GUI_App::MacOpenURL(const wxString& url)
 {
 #if !BBL_RELEASE_TO_PUBLIC
@@ -8323,6 +8344,9 @@ void GUI_App::MacOpenURL(const wxString& url)
 // wxWidgets override to get an event on open files.
 void GUI_App::MacOpenFiles(const wxArrayString &fileNames)
 {
+#ifndef __WXHAIKU__
+    // Not on Haiku: the application is single launch there, a second process would only hand
+    // the files back to this one. Projects are opened in this window.
     bool single_instance = app_config->get("app", "single_instance") == "true";
     if (m_post_initialized && !single_instance) {
         bool has3mf = false;
@@ -8336,6 +8360,7 @@ void GUI_App::MacOpenFiles(const wxArrayString &fileNames)
             return;
         }
     }
+#endif // !__WXHAIKU__
     std::vector<std::string> files;
     std::vector<wxString>    gcode_files;
     std::vector<wxString>    non_gcode_files;
@@ -8387,7 +8412,7 @@ void GUI_App::MacOpenFiles(const wxArrayString &fileNames)
     }
 }
 
-#endif /* __APPLE */
+#endif /* __APPLE__ || __WXHAIKU__ */
 
 Sidebar& GUI_App::sidebar()
 {

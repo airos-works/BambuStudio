@@ -1,0 +1,30 @@
+/*
+ * Resources of the Bambu Studio executable on Haiku (air/OS): signature,
+ * launch flags, version, icon and the file types the application opens.
+ *
+ * B_SINGLE_LAUNCH: Tracker and Deskbar hand documents to the running
+ * instance (B_REFS_RECEIVED), and a second launch from a shell passes its
+ * arguments on (B_ARGV_RECEIVED) and exits; both end in
+ * GUI_App::MacOpenFiles(). This replaces the lock file and the DBus object
+ * of the Linux build.
+ */
+resource vector_icon { import "BambuStudio.hvif" };
+resource app_signature "application/x-vnd.airos-BambuStudio";
+resource app_flags B_SINGLE_LAUNCH;
+resource app_version {
+	major = @SLIC3R_HAIKU_VERSION_MAJOR@, middle = @SLIC3R_HAIKU_VERSION_MIDDLE@, minor = @SLIC3R_HAIKU_VERSION_MINOR@,
+	variety = B_APPV_FINAL, internal = @SLIC3R_HAIKU_VERSION_INTERNAL@,
+	short_info = "Bambu Studio",
+	long_info = "Bambu Studio @SLIC3R_VERSION@: slicer for Bambu Lab and other FDM 3D printers."
+};
+resource file_types message {
+	"types" = "model/3mf",
+	"types" = "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
+	"types" = "model/stl",
+	"types" = "application/sla",
+	"types" = "model/step",
+	"types" = "model/obj",
+	"types" = "application/x-amf",
+	"types" = "text/x-gcode",
+	"types" = "image/svg+xml"
+};

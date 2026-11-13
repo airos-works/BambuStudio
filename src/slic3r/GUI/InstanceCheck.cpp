@@ -302,6 +302,14 @@ namespace instance_check_internal
 
 bool instance_check(int argc, char** argv, bool app_config_single_instance)
 {
+#ifdef __HAIKU__
+	// Haiku: the application is B_SINGLE_LAUNCH (platform/haiku/BambuStudio.rdef). Tracker and
+	// Deskbar hand files to the running instance instead of starting a second one, and one
+	// started from a shell passes its arguments on when it registers with the roster and exits
+	// (both arrive at GUI_App::MacOpenFiles). No lock file, nothing to send from here.
+	(void) argc; (void) argv; (void) app_config_single_instance;
+	return false;
+#else // __HAIKU__
 	std::size_t hashed_path;
 #ifdef _WIN32
 	hashed_path = std::hash<std::string>{}(boost::filesystem::system_complete(argv[0]).string());
@@ -365,6 +373,7 @@ bool instance_check(int argc, char** argv, bool app_config_single_instance)
 	BOOST_LOG_TRIVIAL(info) << "Instance check: Another instance not found or single-instance not set.";
 
 	return false;
+#endif // __HAIKU__
 }
 
 

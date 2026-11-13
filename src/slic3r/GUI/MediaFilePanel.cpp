@@ -10,6 +10,9 @@
 #include "Printer/PrinterFileSystem.h"
 #include "MsgDialog.hpp"
 #include "Widgets/ProgressDialog.hpp"
+#ifdef __HAIKU__
+#include "slic3r/Utils/HaikuDesktop.hpp"
+#endif
 #include <boost/lexical_cast.hpp>
 #include <libslic3r/Model.hpp>
 #include <libslic3r/Format/bbs_3mf.hpp>
@@ -740,6 +743,9 @@ void MediaFilePanel::doAction(size_t index, int action)
 #elif __APPLE__
                     const char *argv[] = { "open", file.local_path.data(), nullptr };
                     ::wxExecute(const_cast<char **>(argv), wxEXEC_ASYNC, nullptr, nullptr);
+#elif defined(__HAIKU__)
+                    // The roster starts the file's preferred application.
+                    Haiku::open_path(file.local_path);
 #else
                     // Create non-const copies of the strings to avoid const_cast
                     // wxExecute may modify the argv array, so we need non-const storage

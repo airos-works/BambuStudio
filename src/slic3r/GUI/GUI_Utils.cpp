@@ -133,9 +133,10 @@ void on_window_geometry(wxTopLevelWindow *tlw, std::function<void()> callback)
     // cf. https://groups.google.com/forum/#!topic/wx-users/c7ntMt6piRI
     // OTOH the geometry is available very soon, so we can call the callback right away
     callback();
-#elif defined __linux__
+#elif defined __linux__ || defined __HAIKU__
     tlw->Bind(wxEVT_SHOW, [=](wxShowEvent &evt) {
         // On Linux, the geometry is only available after wxEVT_SHOW + CallAfter
+        // (Haiku: the same order is safe, the window's looper has it by then)
         // cf. https://groups.google.com/forum/?pli=1#!topic/wx-users/fERSXdpVwAI
         tlw->CallAfter([=]() { callback(); });
         evt.Skip();
@@ -204,6 +205,10 @@ int get_dpi_for_window(const wxWindow *window)
 #elif defined __linux__
     // TODO
     return DPI_DEFAULT;
+#elif defined __WXHAIKU__
+    // Haiku scales its user interface with the system font size: the wx port derives the DPI
+    // from it (96 at 12 pt), for every window alike, and FromDIP() uses the same value.
+    return window != nullptr ? window->GetDPI().x : wxGetDisplayPPI().x;
 #elif defined __APPLE__
     // TODO
     return DPI_DEFAULT;

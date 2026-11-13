@@ -202,6 +202,26 @@ elseif (HAIKU)
     # platform/haiku/GLFW/glfw3.h: the off-screen context calls of the
     # command line mode, without GLFW.
     target_include_directories(BambuStudio PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/platform/haiku)
+    # The executable's resources (signature, single launch, icon, file
+    # types), compiled with rc and added with xres: on Haiku itself they are
+    # in the PATH, a cross build takes the SDK's host tools.
+    find_program(HAIKU_RC rc HINTS ${HAIKU_HOST_TOOLS}/rc ${HAIKU_HOST_TOOLS}/bin ${HAIKU_HOST_TOOLS})
+    find_program(HAIKU_XRES xres HINTS ${HAIKU_HOST_TOOLS} ${HAIKU_HOST_TOOLS}/bin)
+    if (HAIKU_RC AND HAIKU_XRES)
+        string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)" _bs_version "${SLIC3R_VERSION}")
+        math(EXPR SLIC3R_HAIKU_VERSION_MAJOR "${CMAKE_MATCH_1}")
+        math(EXPR SLIC3R_HAIKU_VERSION_MIDDLE "${CMAKE_MATCH_2}")
+        math(EXPR SLIC3R_HAIKU_VERSION_MINOR "${CMAKE_MATCH_3}")
+        math(EXPR SLIC3R_HAIKU_VERSION_INTERNAL "${CMAKE_MATCH_4}")
+        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/platform/haiku/BambuStudio.rdef.in ${CMAKE_CURRENT_BINARY_DIR}/BambuStudio.rdef @ONLY)
+        add_custom_command(TARGET BambuStudio POST_BUILD
+            COMMAND ${HAIKU_RC} -I ${CMAKE_CURRENT_SOURCE_DIR}/platform/haiku -o ${CMAKE_CURRENT_BINARY_DIR}/BambuStudio.rsrc ${CMAKE_CURRENT_BINARY_DIR}/BambuStudio.rdef
+            COMMAND ${HAIKU_XRES} -o $<TARGET_FILE:BambuStudio> ${CMAKE_CURRENT_BINARY_DIR}/BambuStudio.rsrc
+            COMMENT "Adding the Haiku resources to the executable"
+            VERBATIM)
+    else ()
+        message(WARNING "rc or xres not found: the executable gets no Haiku resources (signature, single launch, icon)")
+    endif ()
 else ()
     # Boost on Raspberry-Pi does not link to pthreads explicitly.
     target_link_libraries(BambuStudio ${CMAKE_DL_LIBS} -lstdc++ Threads::Threads pangoft2-1.0)
