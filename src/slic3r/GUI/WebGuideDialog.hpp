@@ -83,6 +83,8 @@ public:
 
     bool apply_config(AppConfig *app_config, PresetBundle *preset_bundle, const PresetUpdater *updater, bool& apply_keeped_changes);
     bool run(bool& config_applied);
+    // Without a web view backend: makes the choices of a user who confirms every page unchanged.
+    bool choose_defaults_without_pages();
 
     // Delete every user filament preset that shares the given filament_id, after asking
     // the user to confirm. Triggered by the trash icon in the "自定义材料" list.
@@ -115,6 +117,8 @@ private:
 
     //First Load
     bool bFirstComplete{false};
+    // No pages are shown (choose_defaults_without_pages()): nothing is sent to them.
+    bool m_without_pages{false};
     std::atomic_bool m_destroy{false};
     boost::thread* m_load_task{ nullptr };
 
