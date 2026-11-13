@@ -12,7 +12,7 @@
 # build/ARCH-gui with --gui); nothing is written into the source tree.
 #
 # --gui takes wxWidgets from the port's install prefix: WX_PREFIX, default
-# BS_SCRATCH/wx-install/ARCH (its bin/wx-config).
+# BS_SCRATCH/wx-install/ARCH (its bin/wx-config, or WX_CONFIG).
 #
 # Other inputs: see tools/haiku/env.sh. BS_CMAKE_ARGS adds cmake arguments.
 set -euo pipefail
@@ -35,7 +35,7 @@ if [[ $GUI == ON ]]; then
 	WX_PREFIX=${WX_PREFIX:-$BS_SCRATCH/wx-install/$HAIKU_ARCH}
 	[[ -x $WX_PREFIX/bin/wx-config ]] \
 		|| { echo "build.sh: no wx-config in $WX_PREFIX/bin (the wx port's install prefix)" >&2; exit 1; }
-	args+=(-DwxWidgets_CONFIG_EXECUTABLE="$WX_PREFIX/bin/wx-config")
+	args+=(-DwxWidgets_CONFIG_EXECUTABLE="${WX_CONFIG:-$WX_PREFIX/bin/wx-config}" -DWX_PREFIX="$WX_PREFIX")
 	# shellcheck disable=SC2207
 	args+=($(bs_gl_cmake_args))
 fi

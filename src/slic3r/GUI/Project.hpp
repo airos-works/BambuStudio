@@ -61,6 +61,9 @@ class ProjectPanel : public wxPanel
 {
 private:
     bool       m_web_init_completed = {false};
+#ifdef __WXHAIKU__
+    bool       m_haiku_page_pending = {false}; // the page is loaded at the first Show(true)
+#endif
     bool       m_reload_already = {false};
 
     wxWebView* m_browser = {nullptr};

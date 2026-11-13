@@ -371,7 +371,7 @@ void H264E_set_vbv_state(
 #if defined(__ARMCC_VERSION) || defined(_WIN32) || defined(__EMSCRIPTEN__)
 #define __BYTE_ORDER 0
 #define __BIG_ENDIAN 1
-#elif defined(__linux__) || defined(__CYGWIN__)
+#elif defined(__linux__) || defined(__CYGWIN__) || defined(__HAIKU__)
 #include <endian.h>
 #elif defined(__APPLE__)
 #include <libkern/OSByteOrder.h>

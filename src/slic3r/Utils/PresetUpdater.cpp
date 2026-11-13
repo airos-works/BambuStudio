@@ -122,11 +122,45 @@ int copy_directory_fix(const fs::path &source, const fs::path &target, std::stri
     return 0;
 }
 
+#ifdef __HAIKU__
+// remove_all() that reads each directory completely before it removes anything
+// from it (see copy_directory_inner()).
+static void haiku_remove_tree(const fs::path &dir, boost::system::error_code &ec)
+{
+    std::vector<fs::path> entries;
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+        entries.push_back(it->path());
+    for (const fs::path &entry : entries) {
+        if (ec)
+            return;
+        const fs::file_status status = fs::symlink_status(entry, ec);
+        if (ec)
+            return;
+        if (fs::is_directory(status))
+            haiku_remove_tree(entry, ec);
+        else
+            fs::remove(entry, ec);
+    }
+    if (!ec)
+        fs::remove(dir, ec);
+}
+#endif
+
 int copy_directory_inner(const fs::path &source, const fs::path &target, std::string &error_message)
 {
     if (fs::exists(target)) {
         boost::system::error_code ec;
         fs::remove_all(target, ec);
+#ifdef __HAIKU__
+        // On the boot volume of a live session ("Try air/OS": BFS under the
+        // write_overlay layer) a directory read while its entries are unlinked
+        // skips entries, so remove_all() leaves part of a large directory
+        // behind and reports "Directory not empty".
+        if (ec == boost::system::errc::directory_not_empty) {
+            ec.clear();
+            haiku_remove_tree(target, ec);
+        }
+#endif
         if (ec) {
             error_message = ec.message();
             BOOST_LOG_TRIVIAL(error) << "copy_directory_fix: Failed to remove existing target directory: " + error_message;

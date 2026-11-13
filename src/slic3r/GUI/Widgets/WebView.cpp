@@ -22,6 +22,8 @@
 #include <wx/msw/webview_edge.h>
 #elif defined(__WXMAC__)
 #include <wx/osx/webview_webkit.h>
+#elif defined(__WXHAIKU__)
+#include <wx/haiku/webview_summit.h>
 #endif
 #include <wx/uri.h>
 #include "libslic3r/Log.hpp"
@@ -87,6 +89,31 @@ register_webview_handler(gpointer data)
     webView->RegisterHandler(wxSharedPtr<wxWebViewHandler>(new wxWebViewFSHandler("memory")));
     return NULL;
 }
+#endif
+
+#ifdef __WXHAIKU__
+// air/OS (summit_webkit), before the first web view exists:
+//  - every web view has a web process of its own, 110 MiB and more: no spare
+//    process kept ready, and none kept of sites navigated away from;
+//  - nothing of the pages is kept on disk. A persistent WebKit profile works
+//    in one process at a time (the pages of a second Studio would never
+//    load), and without the network plug-in there is no sign-in to keep. One
+//    store for all views also means one network process.
+namespace {
+struct SummitWebViewDefaults
+{
+    SummitWebViewDefaults()
+    {
+        setenv("SUMMIT_PREWARM_PROCESS", "0", 0);
+        setenv("SUMMIT_WEBPROCESS_CACHE", "0", 0);
+        wxWebViewSummit::SetDefaultNonPersistent(true);
+        // HAIKU-TODO(zink-teardown): a view that loads about:blank keeps its
+        // engine view: giving one back aborts the process in the GL kit's Zink
+        // add-on (STATUS-gui.md). Views that never had a page still have none.
+        wxWebViewSummit::SetReleaseEngineOnBlank(false);
+    }
+} s_summit_webview_defaults;
+} // namespace
 #endif
 
 // Both defined below, next to the WebViewRef that owns the watcher instances.
@@ -1203,6 +1230,13 @@ bool WebView::RunScript(wxWebView *webView, wxString const &javascript, bool for
         WKWebView * wkWebView = (WKWebView *) webView->GetNativeBackend();
         Slic3r::GUI::WKWebView_evaluateJavaScript(wkWebView, javascript, nullptr);
         return true;
+#elif defined(__WXHAIKU__)
+        // air/OS (summit_webkit): the script is queued to the engine and
+        // nothing is waited for, as on the other platforms. The inert
+        // FakeWebView is not a wxWebViewSummit.
+        if (auto *summit = wxDynamicCast(webView, wxWebViewSummit))
+            return summit->RunScriptNoWait(javascript);
+        return false;
 #else
         WebKitWebView *wkWebView = (WebKitWebView *) webView->GetNativeBackend();
 #if defined(BBL_WEBKITGTK_4_1)
@@ -1324,6 +1358,16 @@ void WebView::ClearBambulabTokenCookies()
     // wxWebView WebKit uses the default WKWebsiteDataStore; cookies are process-wide.
     Slic3r::GUI::WKWebView_clearBambulabTokenCookies();
     BOOST_LOG_TRIVIAL(info) << "WebView: requested bambulab token cookie cleanup (WebKit)";
+#elif defined(__WXHAIKU__)
+    // air/OS (summit_webkit): the views share one website data store, so any
+    // live one reaches the cookies.
+    for (wxWebView *webView : g_webviews) {
+        if (auto *summit = wxDynamicCast(webView, wxWebViewSummit)) {
+            summit->DeleteCookiesNamed("token", "bambulab");
+            BOOST_LOG_TRIVIAL(info) << "WebView: requested bambulab token cookie cleanup (summit_webkit)";
+            break;
+        }
+    }
 #else
     BOOST_LOG_TRIVIAL(warning)
         << "WebView: ClearBambulabTokenCookies has no implementation for the active webview backend";

@@ -18,6 +18,15 @@
 
 using namespace Slic3r;
 
+// Haiku: the main frame is a regular titled window. Its tab has the close and zoom buttons and
+// moves the window, so the top bar keeps the menus and the tools only: no window buttons of its
+// own, no dragging and no double click to maximize.
+#ifdef __WXHAIKU__
+#define BBL_TOPBAR_WINDOW_BUTTONS 0
+#else
+#define BBL_TOPBAR_WINDOW_BUTTONS 1
+#endif
+
 enum CUSTOM_ID
 {
     ID_TOP_MENU_TOOL = 3100,
@@ -280,6 +289,8 @@ void BBLTopbar::Init(wxFrame* parent)
     this->AddSpacer(12);
     */
 
+    maximize_btn = nullptr;
+#if BBL_TOPBAR_WINDOW_BUTTONS
     wxBitmap iconize_bitmap = create_scaled_bitmap("topbar_min", nullptr, TOPBAR_ICON_SIZE);
     wxAuiToolBarItem* iconize_btn = this->AddTool(wxID_ICONIZE_FRAME, "", iconize_bitmap);
 
@@ -298,6 +309,7 @@ void BBLTopbar::Init(wxFrame* parent)
 
     wxBitmap close_bitmap = create_scaled_bitmap("topbar_close", nullptr, TOPBAR_ICON_SIZE);
     wxAuiToolBarItem* close_btn = this->AddTool(wxID_CLOSE_FRAME, "", close_bitmap);
+#endif // BBL_TOPBAR_WINDOW_BUTTONS
 
     Realize();
     // m_toolbar_h = this->GetSize().GetHeight();
@@ -486,12 +498,14 @@ void BBLTopbar::SetTitle(wxString title)
 
 void BBLTopbar::SetMaximizedSize()
 {
-    maximize_btn->SetBitmap(maximize_bitmap);
+    if (maximize_btn)
+        maximize_btn->SetBitmap(maximize_bitmap);
 }
 
 void BBLTopbar::SetWindowSize()
 {
-    maximize_btn->SetBitmap(window_bitmap);
+    if (maximize_btn)
+        maximize_btn->SetBitmap(window_bitmap);
 }
 
 void BBLTopbar::UpdateToolbarWidth(int width)
@@ -541,6 +555,7 @@ void BBLTopbar::Rescale() {
     item->SetBitmap(create_scaled_bitmap("topbar_store", this, TOPBAR_ICON_SIZE));
     */
 
+#if BBL_TOPBAR_WINDOW_BUTTONS
     item = this->FindTool(wxID_ICONIZE_FRAME);
     item->SetBitmap(create_scaled_bitmap("topbar_min", this, TOPBAR_ICON_SIZE));
 
@@ -556,6 +571,7 @@ void BBLTopbar::Rescale() {
 
     item = this->FindTool(wxID_CLOSE_FRAME);
     item->SetBitmap(create_scaled_bitmap("topbar_close", this, TOPBAR_ICON_SIZE));
+#endif // BBL_TOPBAR_WINDOW_BUTTONS
 
     Realize();
 }
@@ -592,6 +608,10 @@ void BBLTopbar::OnCloseFrame(wxAuiToolBarEvent& event)
 
 void BBLTopbar::OnMouseLeftDClock(wxMouseEvent& mouse)
 {
+#if !BBL_TOPBAR_WINDOW_BUTTONS
+    mouse.Skip();
+    return;
+#endif
     wxPoint mouse_pos = ::wxGetMousePosition();
     // check whether mouse is not on any tool item
     if (this->FindToolByCurrentPosition() != NULL &&
@@ -665,8 +685,12 @@ void BBLTopbar::OnMouseLeftDown(wxMouseEvent& event)
     wxPoint frame_pos = m_frame->GetScreenPosition();
     m_delta = mouse_pos - frame_pos;
 
+#if BBL_TOPBAR_WINDOW_BUTTONS
     if (FindToolByCurrentPosition() == NULL
         || this->FindToolByCurrentPosition() == m_title_item)
+#else
+    if (false) // the window is moved by its tab
+#endif
     {
         CaptureMouse();
 #ifdef __WXMSW__

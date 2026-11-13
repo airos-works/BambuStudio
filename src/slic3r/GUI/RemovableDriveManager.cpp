@@ -16,7 +16,9 @@
 #else
 // unix, linux & OSX includes
 #include <errno.h>
+#ifndef __HAIKU__ // no <sys/mount.h> there: the volumes come from the Storage Kit
 #include <sys/mount.h>
+#endif
 #include <sys/stat.h>
 #include <glob.h>
 #include <pwd.h>

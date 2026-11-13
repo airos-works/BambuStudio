@@ -43,6 +43,9 @@ public:
     virtual ~WebViewPanel();
 
     void load_url(wxString& url);
+#ifdef __WXHAIKU__
+    void load_deferred_pages();
+#endif
 
     void UpdateState();
     void OnIdle(wxIdleEvent& evt);
@@ -118,6 +121,12 @@ public:
     //LeftMenu
     std::string m_contentname; // CurrentMenu
     bool        m_leftfirst;   // Left First Loaded
+#ifdef __WXHAIKU__
+    // Pages of the Home tab that are loaded when the tab is first shown, see
+    // load_deferred_pages().
+    wxString    m_deferred_left_url;
+    wxString    m_deferred_home_url;
+#endif
     void CheckMenuNewTag();
     void ShowMenuNewTag(std::string menuname, std::string show);
     void SetLeftMenuShow(std::string menuname, int show);

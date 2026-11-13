@@ -1133,7 +1133,17 @@ bool GuideFrame::run(bool& config_applied)
         this->SetPosition(wxPoint(guide_x, guide_y));
     }
 
-    int result = this->ShowModal();
+    int result = wxID_CANCEL;
+    if (wxWebView::IsBackendAvailable(wxWebViewBackendDefault))
+        result = this->ShowModal();
+    else {
+        // Without a web view backend the pages of the guide cannot be shown and the dialog would
+        // stay blank, on a first run without a close box. Its default choices are applied
+        // instead, so that the application is usable.
+        BOOST_LOG_TRIVIAL(warning) << "GuideFrame: no web view backend, the defaults of the setup guide are applied";
+        if (choose_defaults_without_pages())
+            result = wxID_OK;
+    }
     if (result == wxID_OK) {
         bool apply_keeped_changes = false;
         BOOST_LOG_TRIVIAL(info) << "GuideFrame returned ok";
@@ -1180,6 +1190,83 @@ bool GuideFrame::run(bool& config_applied)
     }
     else
         return false;
+}
+
+// The choices of a user who confirms every page of the guide unchanged, made the way the pages'
+// scripts make them (web/guide/21 and 22): all Bambu Lab printers with all their nozzles and, of
+// the filaments that fit them, those which a selected printer names as a default material.
+// What the application has selected already is kept.
+bool GuideFrame::choose_defaults_without_pages()
+{
+    m_without_pages = true;
+    LoadProfileData();
+    SaveProfileData();
+
+    try {
+        auto trimmed = [](std::string text) {
+            boost::trim(text);
+            return text;
+        };
+        auto short_name = [&trimmed](const std::string &name) { return trimmed(name.substr(0, name.find('@'))); };
+
+        json &models = m_ProfileJson["model"];
+        bool  any_model = false;
+        for (json &model : models)
+            if (model.is_object() && !model.value("nozzle_selected", std::string()).empty())
+                any_model = true;
+        if (!any_model)
+            for (json &model : models)
+                if (model.is_object() && model.value("vendor", std::string()) == PresetBundle::BBL_BUNDLE) {
+                    model["nozzle_selected"] = model.value("nozzle_diameter", std::string());
+                    any_model = true;
+                }
+        if (!any_model)
+            return false;
+
+        json &filaments = m_ProfileJson["filament"];
+        bool  any_filament = false;
+        for (auto it = filaments.begin(); it != filaments.end(); ++it)
+            if (it.value().value("selected", 0) == 1)
+                any_filament = true;
+        if (!any_filament) {
+            std::vector<std::string> printers; // "model++nozzle", as in the filaments' "models"
+            std::set<std::string>    default_materials;
+            for (const json &model : models) {
+                if (!model.is_object())
+                    continue;
+                const std::string nozzles = model.value("nozzle_selected", std::string());
+                if (nozzles.empty())
+                    continue;
+                std::vector<std::string> parts;
+                boost::split(parts, nozzles, boost::is_any_of(";"));
+                for (const std::string &nozzle : parts)
+                    if (!trimmed(nozzle).empty())
+                        printers.emplace_back(model.value("model", std::string()) + "++" + trimmed(nozzle));
+                boost::split(parts, model.value("materials", std::string()), boost::is_any_of(";"));
+                for (const std::string &material : parts)
+                    if (!trimmed(material).empty())
+                        default_materials.insert(short_name(material));
+            }
+            for (auto it = filaments.begin(); it != filaments.end(); ++it) {
+                const std::string fits = it.value().value("models", std::string());
+                bool compatible = fits.empty();
+                for (const std::string &printer : printers)
+                    if (!compatible && fits.find(printer) != std::string::npos)
+                        compatible = true;
+                if (compatible && default_materials.count(short_name(it.key())) != 0)
+                    it.value()["selected"] = 1;
+            }
+        }
+    } catch (std::exception &e) {
+        BOOST_LOG_TRIVIAL(error) << "GuideFrame: default choices failed: " << e.what();
+        return false;
+    }
+
+    // No page asked about the user experience programme: not joined.
+    m_PrivacyUse  = "false";
+    m_GuideFinish = true;
+    SaveProfile();
+    return true;
 }
 
 int GuideFrame::GetFilamentInfo( std::string VendorDirectory, json & pFilaList, std::string filepath, std::string &sVendor, std::string &sType, std::string &sIsSupport)
@@ -1366,11 +1453,11 @@ int GuideFrame::LoadProfileData()
         m_Res["command"]     = "userguide_profile_load_finish";
         m_Res["sequence_id"] = "10001";
         wxString strJS       = wxString::Format("HandleStudio(%s)", m_Res.dump(-1, ' ', true));
-        if (!m_destroy)
+        if (!m_destroy && !m_without_pages)
             wxGetApp().CallAfter([this, strJS] { RunScript(strJS); });
 
         //sync to appconfig
-        if (!m_destroy)
+        if (!m_destroy && !m_without_pages)
             wxGetApp().CallAfter([this] { SaveProfileData(); });
 
     } catch (std::exception& e) {
@@ -1446,9 +1533,17 @@ int GuideFrame::SaveProfileData()
         m_Region = wxGetApp().app_config->get("region");
         m_ProfileJson["region"] = m_Region;
 
+#ifdef __HAIKU__
+        // There is no network plug-in for Haiku. The pages are told that nothing needs to be
+        // installed, so they skip the plug-in page instead of offering a download.
+        m_ProfileJson["network_plugin_install"] = "1";
+        m_ProfileJson["network_plugin_compability"] = "1";
+        network_plugin_ready = true;
+#else
         m_ProfileJson["network_plugin_install"] = wxGetApp().app_config->get("app","installed_networking");
         m_ProfileJson["network_plugin_compability"] = wxGetApp().is_compatibility_version() ? "1" : "0";
         network_plugin_ready = wxGetApp().is_compatibility_version();
+#endif
     }
     catch (std::exception &e) {
         //wxLogMessage("GUIDE: load_profile_error  %s ", e.what());

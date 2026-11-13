@@ -15,6 +15,9 @@
 #                default /data1/airos/deps/${HAIKU_ARCH}
 #   BS_DEPS      prefix of the static dependencies built by build-deps.sh
 #                (default /data1/scratch/bambustudio/deps/${HAIKU_ARCH})
+#   WX_PREFIX    install prefix of the wxWidgets port (GUI build only): made
+#                a find root, so that FindwxWidgets finds the libraries
+#                wx-config names
 set(CMAKE_SYSTEM_NAME Haiku)
 
 macro(_bs_setting name default)
@@ -30,7 +33,10 @@ _bs_setting(HAIKU_SDK /data1/airos/sdk/${HAIKU_ARCH})
 _bs_setting(AIROS_DEPS /data1/airos/deps/${HAIKU_ARCH})
 _bs_setting(BS_DEPS /data1/scratch/bambustudio/deps/${HAIKU_ARCH})
 # try_compile projects see the same settings.
-list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES HAIKU_ARCH HAIKU_SDK AIROS_DEPS BS_DEPS)
+if(NOT WX_PREFIX)
+    set(WX_PREFIX "$ENV{WX_PREFIX}")
+endif()
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES HAIKU_ARCH HAIKU_SDK AIROS_DEPS BS_DEPS WX_PREFIX)
 
 if(HAIKU_ARCH STREQUAL "arm64")
     set(CMAKE_SYSTEM_PROCESSOR aarch64)
@@ -46,6 +52,9 @@ file(STRINGS "${HAIKU_SDK}/env.sh" _bs_triplet REGEX "^TRIPLET=")
 string(REGEX REPLACE "^TRIPLET=" "" HAIKU_TRIPLET "${_bs_triplet}")
 # deps/GMP and deps/MPFR name the autoconf host with this.
 set(TOOLCHAIN_PREFIX ${HAIKU_TRIPLET})
+# The SDK's host tools (rc, xres, mimeset): the application's resources.
+file(STRINGS "${HAIKU_SDK}/env.sh" _bs_tools REGEX "^TOOLS=")
+string(REGEX REPLACE "^TOOLS=" "" HAIKU_HOST_TOOLS "${_bs_tools}")
 
 set(CMAKE_SYSROOT ${HAIKU_SDK}/sysroot)
 set(CMAKE_USER_MAKE_RULES_OVERRIDE ${CMAKE_CURRENT_LIST_DIR}/haiku-rules.cmake)
@@ -75,6 +84,9 @@ set(CMAKE_MODULE_LINKER_FLAGS_INIT "${_bs_link}")
 # (CMake's Haiku platform knows the develop/headers and develop/lib layout
 # below each root).
 set(CMAKE_FIND_ROOT_PATH ${BS_DEPS} ${AIROS_DEPS})
+if(WX_PREFIX)
+    list(APPEND CMAKE_FIND_ROOT_PATH ${WX_PREFIX})
+endif()
 list(APPEND CMAKE_PREFIX_PATH ${BS_DEPS})
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)

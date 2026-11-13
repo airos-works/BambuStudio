@@ -1523,10 +1523,21 @@ wxWindow *PreferencesDialog::create_general_tab()
 #ifdef _WIN32
     sizer->Add(wrap_option_row(scrolled, item_darkmode), flags);
 #endif
-    sizer->Add(wrap_option_row(scrolled, item_single_instance), flags);
+    wxWindow *row_single_instance     = wrap_option_row(scrolled, item_single_instance);
+    wxWindow *row_multi_machine       = wrap_option_row(scrolled, item_multi_machine);
+    wxWindow *row_beta_version_update = wrap_option_row(scrolled, item_beta_version_update);
+    sizer->Add(row_single_instance, flags);
     sizer->Add(wrap_option_row(scrolled, item_fila_manager), flags);
-    sizer->Add(wrap_option_row(scrolled, item_multi_machine), flags);
-    sizer->Add(wrap_option_row(scrolled, item_beta_version_update), flags);
+    sizer->Add(row_multi_machine, flags);
+    sizer->Add(row_beta_version_update, flags);
+#ifdef __HAIKU__
+    // Not offered on Haiku: the application is single launch there by its resources, and
+    // without the network plug-in and the vendor's updater there is neither multi-device
+    // management nor a beta channel.
+    row_single_instance->Hide();
+    row_multi_machine->Hide();
+    row_beta_version_update->Hide();
+#endif
     auto *priv_row = wrap_option_row(scrolled, item_priv_policy);
     if (wxGetApp().is_uep_force_disabled())
         priv_row->SetToolTip(minor_restricted_tip());

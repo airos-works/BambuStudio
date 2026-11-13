@@ -47,6 +47,8 @@
     #pragma comment(lib, "iphlpapi.lib")
 #elif __APPLE__
     #include <CoreFoundation/CoreFoundation.h>
+#elif defined(__HAIKU__)
+    #include "slic3r/Utils/HaikuDesktop.hpp"
 #else // Linux/BSD
     #include <charconv>
 #endif
@@ -333,6 +335,8 @@ static std::string get_unique_id()
     // Now convert the string to std::vector<unsigned char>.
     for (char* c = buf; *c != 0; ++c)
         unique.emplace_back((unsigned char)(*c));
+#elif defined(__HAIKU__)
+    // Haiku has no machine id: the id stays empty, which is reported as such.
 #else // Linux/BSD
     constexpr size_t max_len = 100;
     char cline[max_len] = "";
@@ -459,6 +463,11 @@ static std::string generate_system_info_json()
      cpu_node.put("Cores",  sysctl["hw.ncpu"]);
      cpu_node.put("Model",  sysctl["machdep.cpu.brand_string"]);
      cpu_node.put("Vendor", sysctl["machdep.cpu.vendor"]);
+#elif defined(__HAIKU__)
+    // get_system_info() and the CPU topology instead of /proc/cpuinfo.
+    cpu_node.put("Cores",  std::to_string(Haiku::cpu_count()));
+    cpu_node.put("Model",  Haiku::cpu_name());
+    cpu_node.put("Vendor", "");
 #else // linux/BSD
     std::map<std::string, std::string> lscpu = parse_lscpu_etc("cat /proc/cpuinfo", ':');
     if (auto ncpu_it = lscpu.find("processor"); ncpu_it != lscpu.end()) {

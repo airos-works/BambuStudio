@@ -70,6 +70,9 @@
 #include <wx/glcanvas.h>
 
 #include "libslic3r/Utils.hpp"
+#ifdef __HAIKU__
+#include "libslic3r/HaikuUtils.hpp"
+#endif
 #include "libslic3r/Debounce.hpp"
 #include "libslic3r/Model.hpp"
 #include "libslic3r/I18N.hpp"
@@ -182,6 +185,12 @@ typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS2)(
 // Needed for forcing menu icons back under gtk2 and gtk3
 #if defined(__WXGTK20__) || defined(__WXGTK3__)
     #include <gtk/gtk.h>
+#endif
+
+#ifdef __WXUNIVERSAL__
+// wxUniversal (the Haiku port): the theme to link, at the global scope. The rest of
+// IMPLEMENT_APP() is below, inside the namespace.
+wxIMPLEMENT_WX_THEME_SUPPORT
 #endif
 
 using namespace std::literals;
@@ -1315,8 +1324,12 @@ void GUI_App::post_init()
             BOOST_LOG_TRIVIAL(warning) << "Found glcontext not ready, postpone the init";
         }
 //#endif
+#ifndef __WXHAIKU__
+        // Haiku starts on the Prepare tab: the Home tab is three web pages,
+        // which are loaded when the user goes there (WebViewPanel).
         if (is_editor())
             mainframe->select_tab(size_t(0));
+#endif
         mainframe->Thaw();
         BOOST_LOG_TRIVIAL(info) << "end load_gl_resources";
     }
@@ -1512,7 +1525,13 @@ wxDEFINE_EVENT(EVT_ENTER_FORCE_UPGRADE, wxCommandEvent);
 wxDEFINE_EVENT(EVT_SHOW_NO_NEW_VERSION, wxCommandEvent);
 wxDEFINE_EVENT(EVT_SHOW_DIALOG, wxCommandEvent);
 wxDEFINE_EVENT(EVT_CONNECT_LAN_MODE_PRINT, wxCommandEvent);
+#ifdef __WXUNIVERSAL__
+// The theme of wxUniversal (the Haiku port) is linked through a symbol that IMPLEMENT_APP()
+// declares where it is used: that has to be the global scope (see the top of this file).
+IMPLEMENT_APP_NO_THEMES(GUI_App)
+#else
 IMPLEMENT_APP(GUI_App)
+#endif
 
 //BBS: remove GCodeViewer as seperate APP logic
 //GUI_App::GUI_App(EAppMode mode)
@@ -2571,7 +2590,9 @@ static LogEncOptions s_get_log_enc_opts()
 {
     LogEncOptions enc_options;
 
-#if BBL_RELEASE_TO_PUBLIC
+// Haiku: plain text logs. The encrypted ones can only be read by the vendor's support, which
+// does not exist for this system; here the log is for the user and the port's maintainers.
+#if BBL_RELEASE_TO_PUBLIC && !defined(__HAIKU__)
     std::string region_str;
     if (wxGetApp().app_config && !wxGetApp().app_config->get("region").empty()) {
         region_str = wxGetApp().app_config->get("region");
@@ -2649,7 +2670,10 @@ void GUI_App::init_app_config()
 	// Mac : "~/Library/Application Support/Slic3r"
 
     if (data_dir().empty()) {
-        #ifndef __linux__
+        #if defined(__HAIKU__)
+            // The user settings directory (~/config/settings/BambuStudio), as the command line slicer.
+            std::string data_dir = Slic3r::Haiku::user_settings_dir(into_u8(GetAppName()));
+        #elif !defined(__linux__)
             std::string data_dir = wxStandardPaths::Get().GetUserDataDir().ToUTF8().data();
         #else
             // Since version 2.3, config dir on Linux is in ${XDG_CONFIG_HOME}.
@@ -2769,7 +2793,8 @@ std::map<std::string, std::string> GUI_App::get_extra_header()
 #endif
 #elif defined(__APPLE__)
     extra_headers.insert(std::make_pair("X-BBL-OS-Type", "macos"));
-#elif defined(__LINUX__)
+#elif defined(__LINUX__) || defined(__HAIKU__)
+    // Haiku: the services know no such system; "linux" is the nearest they answer.
     extra_headers.insert(std::make_pair("X-BBL-OS-Type", "linux"));
 #endif
     int major = 0, minor = 0, micro = 0;
@@ -3274,6 +3299,14 @@ bool GUI_App::on_init_inner()
 
     init_live_view_track_context(app_config);
 
+#ifdef __WXHAIKU__
+    // The colour mode follows the system's colours (Appearance preferences),
+    // also while the application runs (wxEVT_SYS_COLOUR_CHANGED). Take the
+    // system's state before the first colour is chosen: the saved value is
+    // the one of the last session.
+    if (app_config)
+        app_config->set("dark_color_mode", wxSystemSettings::GetAppearance().IsDark() ? "1" : "0");
+#endif
 // initialize label colors and fonts
     if (app_config) {
         ::Label::initSysFont(app_config->get_language_code(), false);
@@ -4571,6 +4604,12 @@ void GUI_App::ShowUserGuide() {
 
 void GUI_App::ShowDownNetPluginDlg(bool post_login)
 {
+#ifdef __HAIKU__
+    // There is no network plug-in for Haiku: nothing to download.
+    (void) post_login;
+    BOOST_LOG_TRIVIAL(info) << "network plug-in download requested: not available on Haiku";
+    return;
+#endif
     try {
         auto iter = std::find_if(dialogStack.begin(), dialogStack.end(), [](auto dialog) {
             return dynamic_cast<DownloadProgressDialog *>(dialog) != nullptr;
@@ -6221,6 +6260,12 @@ bool GUI_App::check_send_print_version_policy()
 
 void GUI_App::check_new_version(bool show_tips, int by_user)
 {
+#ifdef __HAIKU__
+    // The update service only knows the Windows, macOS and Linux builds; the air/OS package is
+    // updated by the system's package management.
+    (void) show_tips; (void) by_user;
+    return;
+#endif
     std::string platform = "windows";
 
 #ifdef __WINDOWS__
@@ -8280,7 +8325,9 @@ void GUI_App::OSXStoreOpenFiles(const wxArrayString &fileNames)
     }*/
     wxApp::OSXStoreOpenFiles(fileNames);
 }
+#endif /* __APPLE__ */
 
+#if defined(__APPLE__) || defined(__WXHAIKU__)
 void GUI_App::MacOpenURL(const wxString& url)
 {
 #if !BBL_RELEASE_TO_PUBLIC
@@ -8323,6 +8370,9 @@ void GUI_App::MacOpenURL(const wxString& url)
 // wxWidgets override to get an event on open files.
 void GUI_App::MacOpenFiles(const wxArrayString &fileNames)
 {
+#ifndef __WXHAIKU__
+    // Not on Haiku: the application is single launch there, a second process would only hand
+    // the files back to this one. Projects are opened in this window.
     bool single_instance = app_config->get("app", "single_instance") == "true";
     if (m_post_initialized && !single_instance) {
         bool has3mf = false;
@@ -8336,6 +8386,7 @@ void GUI_App::MacOpenFiles(const wxArrayString &fileNames)
             return;
         }
     }
+#endif // !__WXHAIKU__
     std::vector<std::string> files;
     std::vector<wxString>    gcode_files;
     std::vector<wxString>    non_gcode_files;
@@ -8387,7 +8438,7 @@ void GUI_App::MacOpenFiles(const wxArrayString &fileNames)
     }
 }
 
-#endif /* __APPLE */
+#endif /* __APPLE__ || __WXHAIKU__ */
 
 Sidebar& GUI_App::sidebar()
 {
@@ -8708,7 +8759,16 @@ bool GUI_App::run_wizard(ConfigWizard::RunReason reason, ConfigWizard::StartPage
     if (strFinish == "false" || strFinish.empty())
         pStyle = wxCAPTION | wxTAB_TRAVERSAL;
 
+#ifdef __WXHAIKU__
+    // HAIKU-TODO(zink-teardown): the guide is not destroyed when it closes but
+    // hidden with an empty page, and goes with the main window at exit:
+    // destroying a web view's engine view aborts the process in the GL kit's
+    // Zink add-on (STATUS-gui.md, ZINK-TEARDOWN.md). Its web process stays
+    // until the application quits.
+    GuideFrame &wizard = *new GuideFrame(this, pStyle);
+#else
     GuideFrame wizard(this, pStyle);
+#endif
     auto page = start_page == ConfigWizard::SP_WELCOME ? GuideFrame::BBL_WELCOME :
                 (start_page == ConfigWizard::SP_FILAMENTS || start_page == ConfigWizard::SP_CUSTOM) ? GuideFrame::BBL_FILAMENT_ONLY :
                 start_page == ConfigWizard::SP_PRINTERS ? GuideFrame::BBL_MODELS_ONLY :
@@ -8720,6 +8780,13 @@ bool GUI_App::run_wizard(ConfigWizard::RunReason reason, ConfigWizard::StartPage
 
     bool config_applied = false;
     bool       res = wizard.run(config_applied);
+#ifdef __WXHAIKU__
+    {
+        wizard.Hide();
+        wxString blank("about:blank");
+        wizard.load_url(blank);
+    }
+#endif
 
     if (res) {
         load_current_presets();

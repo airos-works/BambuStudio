@@ -232,6 +232,18 @@ WebViewPanel::WebViewPanel(wxWindow *parent)
     //Create Webview Panel
     m_home_web = new wxBoxSizer(wxHORIZONTAL);
 
+#ifdef __WXHAIKU__
+    // Every web view with a page is a web process of the engine (110-170 MiB
+    // each), a blank one costs nothing. The application starts on the Prepare
+    // tab, so the three pages of the Home tab are loaded when the tab is first
+    // shown (MainFrame calls load_deferred_pages()); the wiki page is loaded by
+    // SwitchWebContent("wiki") anyway. The pages ask for their data (recent
+    // files, login state) themselves when they have loaded.
+    m_deferred_left_url = UrlLeft;
+    m_deferred_home_url = UrlRight;
+    UrlLeft = UrlRight = UrlWiki = "about:blank";
+#endif
+
     // LeftMenu webview
     m_leftfirst   = false;
     m_browserLeft = WebView::CreateWebView(this, UrlLeft, "LeftMenu");
@@ -490,6 +502,20 @@ wxString WebViewPanel::MakeDisconnectUrl(std::string MenuName)
 
     return UrlDisconnect;
 }
+
+#ifdef __WXHAIKU__
+void WebViewPanel::load_deferred_pages()
+{
+    if (!m_deferred_left_url.empty() && m_browserLeft != nullptr) {
+        m_browserLeft->LoadURL(m_deferred_left_url);
+        m_deferred_left_url.clear();
+    }
+    if (!m_deferred_home_url.empty() && m_browser != nullptr) {
+        m_browser->LoadURL(m_deferred_home_url);
+        m_deferred_home_url.clear();
+    }
+}
+#endif
 
 void WebViewPanel::load_url(wxString& url)
 {
@@ -1123,6 +1149,10 @@ void WebViewPanel::ShowNetpluginTip()
 
     int nShow = 0;
     if (!bValid) nShow = 1;
+#ifdef __HAIKU__
+    // There is no network plug-in for Haiku: no tip asking to install it.
+    nShow = 0;
+#endif
 
     BOOST_LOG_TRIVIAL(info) << boost::format("bValid=%1%, nShow=%2%")%bValid %nShow;
 
@@ -2620,6 +2650,12 @@ void WebViewPanel::SetLeftMenuShow(std::string menuname, int show)
 
 bool WebViewPanel::IsMenuAccessDisabled(const std::string &menu) const
 {
+#ifdef __HAIKU__
+    // There is no network plug-in for Haiku, hence no account: MakerWorld, its search and print
+    // history and MakerLab cannot work and are not offered. The home page itself stays.
+    if (menu == "online" || menu == "search" || menu == "printhistory" || menu == "makerlab")
+        return true;
+#endif
     // Account restrictions from the minors decisions; "search" is the MakerWorld search page,
     // "printhistory" is the MakerWorld print-history page.
     if (menu == "home" || menu == "online" || menu == "search" || menu == "printhistory")

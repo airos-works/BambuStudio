@@ -63,7 +63,15 @@ ProjectPanel::ProjectPanel(wxWindow *parent, wxWindowID id, const wxPoint &pos, 
 
     wxBoxSizer* main_sizer = new wxBoxSizer(wxVERTICAL);
 
+#ifdef __WXHAIKU__
+    // A web view with a page is a web process of the engine; a blank one costs
+    // nothing. The page is loaded when the tab is first shown (Show()); it asks
+    // for the project's data itself then ("request_3mf_info").
+    m_browser = WebView::CreateWebView(this, "about:blank", "Project");
+    m_haiku_page_pending = true;
+#else
     m_browser = WebView::CreateWebView(this, m_project_home_url, "Project");
+#endif
     if (m_browser == nullptr) {
         BOOST_LOG_TRIVIAL(info) << boost::format("load web view of project page failed");
         return;
@@ -1049,6 +1057,12 @@ bool ProjectPanel::is_editing_page() const
 
 bool ProjectPanel::Show(bool show)
 {
+#ifdef __WXHAIKU__
+    if (show && m_haiku_page_pending && m_browser != nullptr && wxGetApp().initialized()) {
+        m_haiku_page_pending = false;
+        m_browser->LoadURL(m_project_home_url);
+    }
+#endif
     if (show) update_model_data();
     return wxPanel::Show(show);
 }

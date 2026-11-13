@@ -7,6 +7,9 @@
 #ifdef __APPLE__
 #include "slic3r/Utils/MacDarkMode.hpp"
 #endif
+#ifdef __HAIKU__
+#include "slic3r/Utils/HaikuDesktop.hpp"
+#endif
 #include <string>
 
 #include <boost/algorithm/string.hpp>
@@ -83,6 +86,10 @@ const std::string& shortkey_ctrl_prefix()
 	static const std::string str =
 #ifdef __APPLE__
 		"command+" //"⌘+"
+#elif defined(__HAIKU__)
+		// the system's shortcut key (wxWidgets' Ctrl there): the Alt key unless the Keymap
+		// preferences say otherwise
+		Haiku::command_key_label() + "+"
 #else
 		_u8L("Ctrl+")
 #endif
@@ -95,6 +102,9 @@ const std::string& shortkey_alt_prefix()
 	static const std::string str =
 #ifdef __APPLE__
 		"option+"//"⌥+"
+#elif defined(__HAIKU__)
+		// the system's control key (wxWidgets' Alt there): by default the Ctrl key
+		Haiku::control_key_label() + "+"
 #else
 		"Alt+"
 #endif
@@ -532,6 +542,9 @@ void desktop_open_datadir_folder()
 #elif __APPLE__
 		const char *argv[] = { "open", path.data(), nullptr };
 		::wxExecute(const_cast<char**>(argv), wxEXEC_ASYNC, nullptr);
+#elif defined(__HAIKU__)
+		// Tracker shows the folder.
+		Haiku::show_in_tracker(path);
 #else
 		const char *argv[] = { "xdg-open", path.data(), nullptr };
 
@@ -587,6 +600,9 @@ void desktop_open_any_folder( const std::string& path )
     ::wxExecute(L"explorer /select," + widepath, wxEXEC_ASYNC, nullptr);
 #elif __APPLE__
     openFolderForFile(from_u8(path));
+#elif defined(__HAIKU__)
+    // Tracker opens the folder; for a file its folder, with the file selected.
+    Haiku::show_in_tracker(path);
 #else
 
     // Orca#6449: Open containing dir instead of opening the file directly.

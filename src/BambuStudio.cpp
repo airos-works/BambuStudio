@@ -88,6 +88,9 @@ using namespace nlohmann;
 #include "slic3r/GUI/Plater.hpp"
 #include "slic3r/GUI/GuiColor.hpp"
 #include <GLFW/glfw3.h>
+#ifdef __HAIKU__
+#include "libslic3r/HaikuUtils.hpp"
+#endif
 
 #ifdef __WXGTK__
 #include <X11/Xlib.h>

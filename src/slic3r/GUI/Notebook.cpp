@@ -15,7 +15,13 @@
 namespace {
 constexpr int btn_width_icon      = 40;
 constexpr int btn_width_label_min = 48;
+#ifdef __WXHAIKU__
+// The system font is wider than the HarmonyOS Sans the width was chosen for:
+// "Filament Manager" needs 150.
+constexpr int btn_width_label_max = 160;
+#else
 constexpr int btn_width_label_max = 136;
+#endif
 constexpr int btn_height          = 36;
 }; // namespace
 

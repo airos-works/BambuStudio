@@ -21,7 +21,7 @@
 #include <boost/process.hpp>
 #ifdef __WIN32__
 #include <boost/process/windows.hpp>
-#else
+#elif !defined(__HAIKU__) // Haiku has no System V shared memory (nor the stream tools using it)
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #endif
@@ -1495,6 +1495,11 @@ bool MediaPlayCtrl::get_stream_url(std::string *url)
         }
     }
     CloseHandle(shm);
+#elif defined(__HAIKU__)
+    // The stream service (bambu_source + ffmpeg of the camera tools) publishes its URL in a
+    // System V shared memory segment. Neither exists on Haiku: there is no stream.
+    (void) url;
+    return false;
 #else
     std::string file_url = data_dir() + "/cameratools/url.txt";
     key_t key = ::ftok(file_url.c_str(), 1000);

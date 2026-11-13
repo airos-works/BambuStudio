@@ -1,0 +1,52 @@
+name			bambustudio
+version			2.9.1.70~airos1-1
+architecture	x86_64
+summary			"Slicer for Bambu Lab and other FDM 3D printers"
+description		"Bambu Studio prepares 3D models for printing: it arranges and \
+orients parts, generates supports, slices to G-code with project-based \
+multi-plate and multi-colour workflows, and exports .gcode.3mf files for \
+Bambu Lab printers and G-code for many others. The air/OS build is native: \
+the wxWidgets user interface draws through the Be API (BWindow, BView, \
+BBitmap, BFont), the 3D view is a BGLView, web pages are shown by the Summit \
+engine, and files, fonts, drives, the clipboard and notifications come from \
+the system's kits."
+packager		"air/OS <https://github.com/airos-works>"
+vendor			"airos-works"
+copyrights {
+	"2022-2026 Bambu Lab"
+	"2016-2022 Prusa Research and the PrusaSlicer contributors"
+	"2011-2018 Alessandro Ranellucci and the Slic3r contributors"
+	"2026 air/OS contributors"
+}
+licenses {
+	"GNU AGPL v3"
+}
+urls {
+	"https://github.com/airos-works/BambuStudio"
+}
+source-urls {
+	"https://github.com/airos-works/BambuStudio"
+}
+provides {
+	bambustudio = 2.9.1.70~airos1
+	app:BambuStudio = 2.9.1.70~airos1
+}
+requires {
+	summit_webkit >= 1.10.0
+	haiku >= r1~beta5
+	lib:libGL
+	lib:libcurl >= 4
+	lib:libssl >= 3
+	lib:libcrypto >= 3
+	lib:libz
+	lib:libpng16
+	lib:libjpeg
+	lib:libtiff
+	lib:libexpat
+	lib:libfreetype
+	lib:libavcodec
+	lib:libavutil
+	lib:libswscale
+	lib:libicuuc
+	lib:libicui18n
+}

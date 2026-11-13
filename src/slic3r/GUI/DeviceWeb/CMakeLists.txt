@@ -44,7 +44,8 @@ function(prepare_node_env)
         set(NODE_EXEC "node")
         set(PNPM_EXEC_NAME "pnpm")
     else()
-        if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+        # Node.js runs on the build machine: its processor, not the target's of a cross build.
+        if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "aarch64")
             set(NODE_URL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-arm64.tar.xz")
             set(NODE_ARCHIVE_NAME "node-v${NODE_VERSION}-linux-arm64.tar.xz")
             set(NODE_BIN_DIR "node-v${NODE_VERSION}-linux-arm64/bin")
@@ -171,6 +172,18 @@ function(prepare_node_env)
     set(PNPM_EXECUTABLE "${PNPM_EXECUTABLE}" PARENT_SCOPE)
 endfunction()
 
+# The Node.js/pnpm/Vite bundle of the device page (the printer's own pages, which
+# need Bambu's network plug-in). SLIC3R_DEVICE_PAGE=OFF skips it, and with it
+# the download of Node.js and pnpm at configure time: the default on Haiku,
+# where the plug-in does not exist.
+if (HAIKU)
+    set(_device_page_default OFF)
+else ()
+    set(_device_page_default ON)
+endif ()
+option(SLIC3R_DEVICE_PAGE "Build the device page web bundle (downloads Node.js and pnpm)" ${_device_page_default})
+
+if (SLIC3R_DEVICE_PAGE)
 # ???????? config ??????
 prepare_node_env()
 
@@ -257,6 +270,7 @@ if (CMAKE_GENERATOR MATCHES "Visual Studio")
 else()
     add_custom_target(device_page_build DEPENDS "${DEVICE_PAGE_BUILD_STAMP}")
 endif()
+endif () # SLIC3R_DEVICE_PAGE
 
 # ==================== DeviceWebHtml: native HTML front-end ====================
 # Plain static assets - no Node/pnpm/Vite involved, so this deliberately bypasses

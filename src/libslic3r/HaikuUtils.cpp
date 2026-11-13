@@ -17,6 +17,102 @@
 #include <OS.h>
 #include <image.h>
 
+#include <dlfcn.h>
+#include <locale.h>
+#include <pthread.h>
+
+// --- setlocale(), serialized and cheap ----------------------------------------------------
+//
+// libstdc++ is built with GCC's "generic" locale model on Haiku: every floating point number
+// read from or written to a stream (operator>>(double&), operator<<(double)) switches the
+// locale of the *process* to "C" and back:
+//
+//     old = setlocale(LC_ALL, NULL); setlocale(LC_ALL, "C"); strtod(...); setlocale(LC_ALL, old);
+//
+// The slicer does that on all cores at once (the presets are parsed in a tbb::parallel_for).
+// libroot's setlocale() is not thread safe, and once the process has a locale other than "C"
+// each call rebuilds ICU objects: the application crashed at start-up now and then (in
+// ICUCollateData::SetToPosix(), called by two workers) and spent seconds there.
+//
+// This definition is found before libroot's by every image of the process (the runtime
+// loader resolves in load order, the executable first). It
+//  - lets one thread at a time into the real function,
+//  - returns the names in a buffer of the calling thread,
+//  - does nothing where nothing changes: a category set to the name it has, and LC_ALL set
+//    to "C" while LC_NUMERIC is "C" already. The latter is libstdc++'s switch for a number
+//    conversion; GUI_App and the worker threads keep LC_NUMERIC at "C" at all times. The
+//    restoring call that follows names the locale that never changed and is a no-op too.
+namespace {
+
+typedef char *(*setlocale_function)(int, const char *);
+
+pthread_mutex_t s_setlocale_lock = PTHREAD_MUTEX_INITIALIZER;
+
+// The name of every category as libroot reports it, valid until a category is changed.
+struct LocaleName
+{
+    bool valid;
+    char name[512];
+};
+LocaleName s_locale_names[LC_LAST + 1];
+
+setlocale_function libroot_setlocale()
+{
+    static setlocale_function function = (setlocale_function) dlsym(RTLD_NEXT, "setlocale");
+    return function;
+}
+
+// With s_setlocale_lock held.
+const char *current_locale_name(int category)
+{
+    LocaleName &entry = s_locale_names[category];
+    if (!entry.valid) {
+        const char *name = libroot_setlocale()(category, nullptr);
+        if (name == nullptr || strlen(name) >= sizeof(entry.name))
+            return name;
+        strcpy(entry.name, name);
+        entry.valid = true;
+    }
+    return entry.name;
+}
+
+bool is_c_locale_name(const char *name)
+{
+    return name != nullptr && (strcmp(name, "C") == 0 || strcmp(name, "POSIX") == 0);
+}
+
+} // namespace
+
+extern "C" __attribute__((visibility("default"), used)) char *setlocale(int category, const char *locale)
+{
+    static thread_local char t_result[512];
+
+    if (category < 0 || category > LC_LAST || libroot_setlocale() == nullptr)
+        return nullptr;
+
+    pthread_mutex_lock(&s_setlocale_lock);
+    const char *result;
+    if (locale == nullptr) {
+        result = current_locale_name(category);
+    } else if (*locale != 0 && current_locale_name(category) != nullptr && strcmp(locale, current_locale_name(category)) == 0) {
+        // the category has this locale already
+        result = current_locale_name(category);
+    } else if (category == LC_ALL && is_c_locale_name(locale) && is_c_locale_name(current_locale_name(LC_NUMERIC))) {
+        // the switch around a number conversion: numbers are in the "C" locale already
+        result = "C";
+    } else {
+        result = libroot_setlocale()(category, locale);
+        for (LocaleName &entry : s_locale_names)
+            entry.valid = false;
+    }
+    if (result != nullptr) {
+        if (strlen(result) < sizeof(t_result))
+            result = strcpy(t_result, result);
+    }
+    pthread_mutex_unlock(&s_setlocale_lock);
+    return const_cast<char *>(result);
+}
+
 namespace Slic3r {
 namespace Haiku {
 

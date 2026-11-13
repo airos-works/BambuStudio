@@ -18,9 +18,10 @@ bool PopupWindow::Create(wxWindow *parent, int style)
 {
     if (!wxPopupTransientWindow::Create(parent, style))
         return false;
-#ifdef __WXGTK__
+#if defined(__WXGTK__) || defined(__WXHAIKU__)
     // GTK popups are separate native windows and can outlive their visible
     // anchor when the app loses focus or a modeless helper is hidden/resized.
+    // The same on Haiku, where a popup is a window (BWindow) of its own.
     m_owner = GetTopParent(parent);
     if (m_owner) {
         m_owner->Bind(wxEVT_ICONIZE, &PopupWindow::topWindowIconize, this);
@@ -40,7 +41,7 @@ bool PopupWindow::Create(wxWindow *parent, int style)
 
 PopupWindow::~PopupWindow()
 {
-#ifdef __WXGTK__
+#if defined(__WXGTK__) || defined(__WXHAIKU__)
     if (wxTheApp)
         wxTheApp->Unbind(wxEVT_ACTIVATE_APP, &PopupWindow::appActivate, this);
     if (m_owner) {
@@ -126,7 +127,7 @@ void PopupWindow::OnMouseEvent2(wxMouseEvent &evt)
 
 #endif
 
-#ifdef __WXGTK__
+#if defined(__WXGTK__) || defined(__WXHAIKU__)
 void PopupWindow::appActivate(wxActivateEvent &event)
 {
     event.Skip();

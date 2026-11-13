@@ -3,8 +3,12 @@ project(libslic3r)
 
 include(PrecompiledHeader)
 
-string(TIMESTAMP COMPILE_TIME %Y%m%d-%H%M%S)
-set(SLIC3R_BUILD_TIME ${COMPILE_TIME})
+# SLIC3R_BUILD_TIME may be given (-DSLIC3R_BUILD_TIME=...): a fixed value keeps
+# libslic3r_version.h, and with it every object, unchanged across configurations.
+if (NOT SLIC3R_BUILD_TIME)
+    string(TIMESTAMP COMPILE_TIME %Y%m%d-%H%M%S)
+    set(SLIC3R_BUILD_TIME ${COMPILE_TIME})
+endif ()
 
 if("${BBL_RELEASE_TO_PUBLIC}" STREQUAL "0")
 execute_process(
@@ -607,6 +611,12 @@ if(MSVC AND NOT DEFINED OpenCV_ARCH)
     endif()
     unset(_slic3r_gen_platform)
 endif()
+if (HAIKU)
+    # HaikuUtils.cpp defines a setlocale() that serializes the calls libstdc++
+    # makes from every thread: the linker must take it into every executable
+    # and keep it (--gc-sections), although nothing in the program refers to it.
+    target_link_options(libslic3r INTERFACE "LINKER:-u,setlocale")
+endif ()
 if (HAIKU)
     # OpenCV is not a dependency on Haiku: the few functions used (k-means
     # colour quantisation, colour conversions, texture decoding) are in

@@ -833,6 +833,8 @@ if (HAIKU)
     list(APPEND SLIC3R_GUI_SOURCES
         GUI/RemovableDriveManagerHaiku.cpp
         GUI/RemovableDriveManagerHaiku.hpp
+        Utils/HaikuDesktop.cpp
+        Utils/HaikuDesktop.hpp
     )
 endif ()
 
