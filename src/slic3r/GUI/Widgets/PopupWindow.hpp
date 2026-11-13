@@ -47,7 +47,7 @@ private:
     wxWeakRef<wxWindow> hovered { this };
 #endif
 
-#ifdef __WXGTK__
+#if defined(__WXGTK__) || defined(__WXHAIKU__)
     wxWeakRef<wxWindow> m_owner;
     void appActivate(wxActivateEvent &event);
     void topWindowIconize(wxIconizeEvent &event);

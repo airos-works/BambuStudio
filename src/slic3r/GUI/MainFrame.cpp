@@ -208,7 +208,11 @@ static wxIcon main_frame_icon(GUI_App::EAppMode app_mode)
 }
 
 // BBS
-#ifndef __APPLE__
+#if defined(__WXHAIKU__)
+// Haiku: a regular window with its tab (title, close and zoom buttons); the top bar below it
+// has the menus and tools, but no window buttons (BBLTopbar.cpp).
+#define BORDERLESS_FRAME_STYLE (wxCAPTION | wxRESIZE_BORDER | wxMINIMIZE_BOX | wxMAXIMIZE_BOX | wxCLOSE_BOX)
+#elif !defined(__APPLE__)
 #define BORDERLESS_FRAME_STYLE (wxRESIZE_BORDER | wxMINIMIZE_BOX | wxMAXIMIZE_BOX | wxCLOSE_BOX)
 #else
 #define BORDERLESS_FRAME_STYLE (wxMINIMIZE_BOX | wxMAXIMIZE_BOX | wxCLOSE_BOX)
@@ -2930,6 +2934,7 @@ static wxMenu* generate_help_menu()
     //    [](wxCommandEvent&) {
     //        //TODO
     //    });
+#ifndef __HAIKU__ // the air/OS package is updated by the system's package management
     // Check New Version
     append_menu_item(helpMenu, wxID_ANY, _L("Check for Update"), _L("Check for Update"),
         [](wxCommandEvent&) {
@@ -2937,6 +2942,7 @@ static wxMenu* generate_help_menu()
         }, "", nullptr, []() {
             return true;
         });
+#endif // !__HAIKU__
 
     append_menu_item(helpMenu, wxID_ANY, _L("Check for Presets Update"), _L("Check for Presets Update"), [](wxCommandEvent &) {
         wxGetApp().check_config_updates_from_menu();
