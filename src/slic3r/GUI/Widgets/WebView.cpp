@@ -23,13 +23,7 @@
 #elif defined(__WXMAC__)
 #include <wx/osx/webview_webkit.h>
 #elif defined(__WXHAIKU__)
-// HAIKU-TODO(wx): until the wx port has its summit_webkit backend (WX-REQUESTS.md), this
-// compiles without it: wxWebView::New() then returns null and every view is the inert
-// FakeWebView. Remove the __has_include test and BBL_HAIKU_WEBVIEW_SUMMIT with it.
-#if __has_include(<wx/haiku/webview_summit.h>)
 #include <wx/haiku/webview_summit.h>
-#define BBL_HAIKU_WEBVIEW_SUMMIT 1
-#endif
 #endif
 #include <wx/uri.h>
 #include "libslic3r/Log.hpp"
@@ -97,7 +91,7 @@ register_webview_handler(gpointer data)
 }
 #endif
 
-#ifdef BBL_HAIKU_WEBVIEW_SUMMIT
+#ifdef __WXHAIKU__
 // air/OS (summit_webkit), before the first web view exists:
 //  - every web view has a web process of its own, 110 MiB and more: no spare
 //    process kept ready, and none kept of sites navigated away from;
@@ -113,6 +107,10 @@ struct SummitWebViewDefaults
         setenv("SUMMIT_PREWARM_PROCESS", "0", 0);
         setenv("SUMMIT_WEBPROCESS_CACHE", "0", 0);
         wxWebViewSummit::SetDefaultNonPersistent(true);
+        // HAIKU-TODO(zink-teardown): a view that loads about:blank keeps its
+        // engine view: giving one back aborts the process in the GL kit's Zink
+        // add-on (STATUS-gui.md). Views that never had a page still have none.
+        wxWebViewSummit::SetReleaseEngineOnBlank(false);
     }
 } s_summit_webview_defaults;
 } // namespace
@@ -1236,10 +1234,8 @@ bool WebView::RunScript(wxWebView *webView, wxString const &javascript, bool for
         // air/OS (summit_webkit): the script is queued to the engine and
         // nothing is waited for, as on the other platforms. The inert
         // FakeWebView is not a wxWebViewSummit.
-#ifdef BBL_HAIKU_WEBVIEW_SUMMIT
         if (auto *summit = wxDynamicCast(webView, wxWebViewSummit))
             return summit->RunScriptNoWait(javascript);
-#endif
         return false;
 #else
         WebKitWebView *wkWebView = (WebKitWebView *) webView->GetNativeBackend();
@@ -1365,7 +1361,6 @@ void WebView::ClearBambulabTokenCookies()
 #elif defined(__WXHAIKU__)
     // air/OS (summit_webkit): the views share one website data store, so any
     // live one reaches the cookies.
-#ifdef BBL_HAIKU_WEBVIEW_SUMMIT
     for (wxWebView *webView : g_webviews) {
         if (auto *summit = wxDynamicCast(webView, wxWebViewSummit)) {
             summit->DeleteCookiesNamed("token", "bambulab");
@@ -1373,7 +1368,6 @@ void WebView::ClearBambulabTokenCookies()
             break;
         }
     }
-#endif
 #else
     BOOST_LOG_TRIVIAL(warning)
         << "WebView: ClearBambulabTokenCookies has no implementation for the active webview backend";

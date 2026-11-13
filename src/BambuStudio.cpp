@@ -1786,11 +1786,7 @@ int CLI::run(int argc, char **argv)
     bool start_gui = m_actions.empty() && !downward_check;
     if (start_gui) {
         BOOST_LOG_TRIVIAL(info) << "no action, start gui directly" << std::endl;
-#ifndef __HAIKU__
-        // Not on Haiku: a font needs the application object there (the connection to the
-        // app_server), which wxEntry() creates. GUI_App::on_init_inner() sets the fonts up.
         ::Label::initSysFont();
-#endif
 #ifdef SLIC3R_GUI
     /*#if !defined(_WIN32) && !defined(__APPLE__)
         // likely some linux / unix system
