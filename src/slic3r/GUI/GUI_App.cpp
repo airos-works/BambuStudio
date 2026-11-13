@@ -8759,7 +8759,16 @@ bool GUI_App::run_wizard(ConfigWizard::RunReason reason, ConfigWizard::StartPage
     if (strFinish == "false" || strFinish.empty())
         pStyle = wxCAPTION | wxTAB_TRAVERSAL;
 
+#ifdef __WXHAIKU__
+    // HAIKU-TODO(zink-teardown): the guide is not destroyed when it closes but
+    // hidden with an empty page, and goes with the main window at exit:
+    // destroying a web view's engine view aborts the process in the GL kit's
+    // Zink add-on (STATUS-gui.md, ZINK-TEARDOWN.md). Its web process stays
+    // until the application quits.
+    GuideFrame &wizard = *new GuideFrame(this, pStyle);
+#else
     GuideFrame wizard(this, pStyle);
+#endif
     auto page = start_page == ConfigWizard::SP_WELCOME ? GuideFrame::BBL_WELCOME :
                 (start_page == ConfigWizard::SP_FILAMENTS || start_page == ConfigWizard::SP_CUSTOM) ? GuideFrame::BBL_FILAMENT_ONLY :
                 start_page == ConfigWizard::SP_PRINTERS ? GuideFrame::BBL_MODELS_ONLY :
@@ -8771,6 +8780,13 @@ bool GUI_App::run_wizard(ConfigWizard::RunReason reason, ConfigWizard::StartPage
 
     bool config_applied = false;
     bool       res = wizard.run(config_applied);
+#ifdef __WXHAIKU__
+    {
+        wizard.Hide();
+        wxString blank("about:blank");
+        wizard.load_url(blank);
+    }
+#endif
 
     if (res) {
         load_current_presets();

@@ -83,9 +83,12 @@ class QMP:
         self.command('input-send-event', events=[{'type': 'btn', 'data': {'button': 'left', 'down': True}}])
         try:
             time.sleep(0.15)
+            # BS_VM_DRAG_SECONDS: a slow drag, for an application that renders
+            # slowly (software GL) and so sees only the last of quick moves.
+            seconds = float(os.environ.get('BS_VM_DRAG_SECONDS', '0.8'))
             for step in range(1, 21):
                 self.move(x + (end_x - x) * step / 20, y + (end_y - y) * step / 20, width, height)
-                time.sleep(0.04)
+                time.sleep(seconds / 20)
         finally:
             self.command('input-send-event', events=[{'type': 'btn', 'data': {'button': 'left', 'down': False}}])
 
