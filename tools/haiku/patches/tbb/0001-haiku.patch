@@ -5,7 +5,8 @@ system": the installed headers name Haiku next to it here; the library's own
 sources are compiled with -D__unix__ (tools/haiku/build-deps.sh), as they
 only use POSIX there (pthreads, semaphores, mmap, sysconf).
 
-There is no libdl on Haiku: link CMAKE_DL_LIBS, as the Clang rules do.
+There is no libdl on Haiku: link CMAKE_DL_LIBS, as the Clang rules do. No
+-flto: the static libraries must hold machine code.
 
 --- a/cmake/compilers/GNU.cmake
 +++ b/cmake/compilers/GNU.cmake
@@ -19,6 +20,17 @@ There is no libdl on Haiku: link CMAKE_DL_LIBS, as the Clang rules do.
  endif()
  
  # Ignore -Werror set through add_compile_options() or added to CMAKE_CXX_FLAGS if TBB_STRICT is disabled.
+@@ -64,7 +65,9 @@
+ endif()
+ 
+ # For some reason GCC does not instrument code with Thread Sanitizer when lto is enabled and C linker is used.
+-if (NOT TBB_SANITIZE MATCHES "thread")
++# Not for Haiku either: the cross binutils have no LTO plugin set up, and a
++# static library of LTO-only objects has no symbols for its users then.
++if (NOT TBB_SANITIZE MATCHES "thread" AND NOT HAIKU)
+     set(TBB_IPO_COMPILE_FLAGS $<$<NOT:$<CONFIG:Debug>>:-flto>)
+     set(TBB_IPO_LINK_FLAGS $<$<NOT:$<CONFIG:Debug>>:-flto>)
+ endif()
 --- a/include/oneapi/tbb/detail/_config.h
 +++ b/include/oneapi/tbb/detail/_config.h
 @@ -268,7 +268,8 @@

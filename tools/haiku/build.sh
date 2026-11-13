@@ -40,15 +40,24 @@ if [[ $GUI == ON ]]; then
 	args+=($(bs_gl_cmake_args))
 fi
 
-cmake -S "$BS_ROOT" -B "$BS_BUILD" -G Ninja \
-	-DCMAKE_TOOLCHAIN_FILE="$BS_TOOLCHAIN" -DHAIKU_ARCH="$HAIKU_ARCH" \
-	-DHAIKU_SDK="$HAIKU_SDK" -DAIROS_DEPS="$AIROS_DEPS" -DBS_DEPS="$BS_DEPS" \
-	-DCMAKE_BUILD_TYPE=Release \
-	-DCMAKE_C_FLAGS="$BS_CFLAGS" -DCMAKE_CXX_FLAGS="$BS_CXXFLAGS" \
-	-DCMAKE_C_FLAGS_RELEASE="-DNDEBUG" -DCMAKE_CXX_FLAGS_RELEASE="-DNDEBUG" \
-	-DCMAKE_EXE_LINKER_FLAGS="$BS_LDFLAGS -Wl,--gc-sections" \
-	-DSLIC3R_GUI=$GUI -DSLIC3R_STATIC=ON -DSLIC3R_BUILD_TESTS=OFF \
-	-DSLIC3R_ENABLE_OPENMESHCRAFT_BOOLEAN=OFF -DSLIC3R_ALLOW_MCUT_BOOLEAN=ON \
-	-DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0 \
-	"${args[@]}" ${BS_CMAKE_ARGS:-}
+args+=(-G Ninja
+	-DCMAKE_TOOLCHAIN_FILE="$BS_TOOLCHAIN" -DHAIKU_ARCH="$HAIKU_ARCH"
+	-DHAIKU_SDK="$HAIKU_SDK" -DAIROS_DEPS="$AIROS_DEPS" -DBS_DEPS="$BS_DEPS"
+	-DCMAKE_BUILD_TYPE=Release
+	-DCMAKE_C_FLAGS="$BS_CFLAGS" -DCMAKE_CXX_FLAGS="$BS_CXXFLAGS"
+	-DCMAKE_C_FLAGS_RELEASE="-DNDEBUG" -DCMAKE_CXX_FLAGS_RELEASE="-DNDEBUG"
+	-DCMAKE_EXE_LINKER_FLAGS="$BS_LDFLAGS -Wl,--gc-sections"
+	-DSLIC3R_GUI=$GUI -DSLIC3R_STATIC=ON -DSLIC3R_BUILD_TESTS=OFF
+	-DSLIC3R_ENABLE_OPENMESHCRAFT_BOOLEAN=OFF -DSLIC3R_ALLOW_MCUT_BOOLEAN=ON
+	-DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0
+	${BS_CMAKE_ARGS:-})
+# Configure only when the settings change (or BS_RECONFIGURE=1): every
+# configuration stamps the time into libslic3r_version.h, which everything
+# includes, so configuring again means building again. A changed
+# CMakeLists.txt is picked up by the build itself.
+settings=$(printf '%s\n' "${args[@]}" | sha256sum | cut -d' ' -f1)
+if [[ ${BS_RECONFIGURE:-0} == 1 || ! -f $BS_BUILD/build.ninja || $(cat "$BS_BUILD/.bs-settings" 2>/dev/null) != "$settings" ]]; then
+	cmake -S "$BS_ROOT" -B "$BS_BUILD" "${args[@]}"
+	echo "$settings" > "$BS_BUILD/.bs-settings"
+fi
 cmake --build "$BS_BUILD" -j"$BS_JOBS" ${1:+--target "$@"}

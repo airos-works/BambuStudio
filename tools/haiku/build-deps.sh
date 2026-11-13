@@ -61,8 +61,8 @@ fetch() {
 }
 
 # unpack ARCHIVE DIR [PATCH...]: BS_DEPS_SRC/DIR from the archive (its single
-# top directory stripped) with the patches applied (-p1), once: the tree is
-# redone when the archive or a patch changes.
+# top directory stripped, the archive's file times kept) with the patches
+# applied (-p1), once: the tree is redone when the archive or a patch changes.
 unpack() {
 	local archive=$1 dir=$BS_DEPS_SRC/$2 stamp patch tmp
 	shift 2
@@ -79,10 +79,18 @@ unpack() {
 	[[ ${#tmp[@]} == 1 && -d ${tmp[0]} ]] || die "$archive: not a single top directory"
 	mv "${tmp[0]}" "$dir"
 	rmdir "$dir.tmp"
+	touch "$dir/.bs-unpacked"
+	local newest=
 	for patch in "$@"; do
 		patch -d "$dir" -p1 -s -N --no-backup-if-mismatch < "$patch" \
 			|| die "$(basename "$patch") does not apply to $(basename "$dir")"
+		[[ -n $newest && ! $patch -nt $newest ]] || newest=$patch
 	done
+	# A patched file is as old as the newest patch, not as this extraction:
+	# unpacking again for an unrelated reason must not make every user of an
+	# installed header rebuild.
+	[[ -z $newest ]] || find "$dir" -type f -newer "$dir/.bs-unpacked" -exec touch -r "$newest" {} +
+	rm -f "$dir/.bs-unpacked"
 	echo "$stamp" > "$dir/.bs-source"
 }
 

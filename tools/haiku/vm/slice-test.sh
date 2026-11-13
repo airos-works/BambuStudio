@@ -12,7 +12,9 @@
 #
 # with a stock printer profile (default "Bambu Lab A1 0.4 nozzle" and its
 # default process and filament) and exports each as plate_1.gcode and a
-# .gcode.3mf. Checks on the host what came back: the G-code has layers,
+# .gcode.3mf; before that it prints the platform layer's findings
+# (--platform-info) and runs minicv's self-test. Without SLICE_TEST_QUICK the
+# cube is sliced again with 1 and 2 threads (TBB scaling). Checks on the host what came back: the G-code has layers,
 # filament use and an estimated time, and the 3MF contains it.
 #
 # Results: BS_SCRATCH/vm-core/slice-test-ARCH/out (output.log, the G-code
@@ -30,6 +32,9 @@ payload=$BS_SCRATCH/vm-core/slice-test-$HAIKU_ARCH
 rm -rf "$payload"
 mkdir -p "$payload/BambuStudio/bin" "$payload/BambuStudio/resources" "$payload/models"
 "${CROSS}strip" --strip-debug -o "$payload/BambuStudio/bin/bambu-studio-cli" "$cli"
+# minicv's self-test (the OpenCV subset libslic3r uses), if it was built
+cmake --build "$BS_BUILD" --target minicv_test > /dev/null
+cp "$BS_BUILD/src/minicv/minicv_test" "$payload/BambuStudio/bin/"
 # what a slice reads of the resources (the rest is for the GUI)
 for dir in profiles profiles_template info printers flush filament_mixing data; do
 	cp -rL "$BS_ROOT/resources/$dir" "$payload/BambuStudio/resources/"
@@ -53,6 +58,8 @@ uname -a
 sysinfo -cpu | head -n 2
 sysinfo -mem | head -n 3
 step \$CLI --help
+step \$CLI --platform-info
+step /payload/BambuStudio/bin/minicv_test
 step sh -c "\$CLI --list-presets | grep -c ."
 step sh -c "\$CLI --list-presets --printer \"\$PRINTER\" | head -n 12"
 step \$CLI --debug 2 --printer "\$PRINTER" --info --slice 1 --outputdir /payload/out/cube \\
@@ -63,6 +70,8 @@ if [ \$QUICK -eq 0 ]; then
 	step \$CLI --debug 2 --printer "\$PRINTER" --info --orient 1 --slice 1 --outputdir /payload/out/fdmtest \\
 		--export-3mf fdmtest.gcode.3mf /payload/models/ksr_FDMTest.stl
 	step \$CLI --debug 2 --threads 1 --printer "\$PRINTER" --slice 1 --outputdir /payload/out/cube-1thread \\
+		/payload/models/Bambu_Cube_V2.stl
+	step \$CLI --debug 2 --threads 2 --printer "\$PRINTER" --slice 1 --outputdir /payload/out/cube-2threads \\
 		/payload/models/Bambu_Cube_V2.stl
 fi
 exit \$status
