@@ -99,7 +99,8 @@ summary=$out/summary.txt
 	done
 	for project in "$out"/*/*.gcode.3mf; do
 		[[ -f $project ]] || continue
-		if unzip -l "$project" | grep -q "Metadata/plate_1.gcode"; then
+		listing=$(unzip -l "$project")
+		if grep -q "Metadata/plate_1.gcode" <<< "$listing"; then
 			echo "$(basename "$project"): $(stat -c %s "$project") bytes, has Metadata/plate_1.gcode"
 		else
 			echo "$(basename "$project"): NO G-CODE INSIDE"
