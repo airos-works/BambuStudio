@@ -315,6 +315,18 @@ build_libharu() {
 }
 
 # --- driver -----------------------------------------------------------------
+# The CMake files of a dependency built from this checkout (deps/GLEW,
+# deps/libharu), so that a change to them rebuilds it.
+in_tree_build_files() {
+	local dir
+	case $1 in
+	glew) dir=$BS_ROOT/deps/GLEW/glew ;;
+	libharu) dir=$BS_ROOT/deps/libharu/libharu ;;
+	*) return 0 ;;
+	esac
+	find "$dir" \( -name CMakeLists.txt -o -name '*.cmake' \) -type f -print0 | sort -z | xargs -0 cat
+}
+
 if [[ ${1:-} == --list ]]; then
 	for NAME in "${ORDER[@]}"; do
 		version=VERSION_$NAME
@@ -334,6 +346,8 @@ for NAME in "${RECIPES[@]}"; do
 			declare -f "build_$NAME" cmake_dep autotools_dep bs_gl_cmake_args
 			echo "$VERSION $BS_CFLAGS $BS_LDFLAGS ${HAIKU_REVISION:-}"
 			cat "$BS_TOOLCHAIN" "$HERE/haiku-rules.cmake" $(haiku_patches "$NAME")
+			# the build files of the in-tree sources (GLEW, libharu)
+			in_tree_build_files "$NAME"
 		} | sha256sum | cut -d' ' -f1
 	)
 	if [[ ${FORCE:-0} != 1 && -f $BUILD.stamp && $(cat "$BUILD.stamp") == "$stamp" ]]; then
