@@ -2624,6 +2624,12 @@ void WebViewPanel::SetLeftMenuShow(std::string menuname, int show)
 
 bool WebViewPanel::IsMenuAccessDisabled(const std::string &menu) const
 {
+#ifdef __HAIKU__
+    // There is no network plug-in for Haiku, hence no account: MakerWorld, its search and print
+    // history and MakerLab cannot work and are not offered. The home page itself stays.
+    if (menu == "online" || menu == "search" || menu == "printhistory" || menu == "makerlab")
+        return true;
+#endif
     // Account restrictions from the minors decisions; "search" is the MakerWorld search page,
     // "printhistory" is the MakerWorld print-history page.
     if (menu == "home" || menu == "online" || menu == "search" || menu == "printhistory")
