@@ -1,5 +1,5 @@
 name			bambustudio
-version			2.9.1.70~airos1-2
+version			2.9.1.70~airos1-3
 architecture	x86_64
 summary			"Slicer for Bambu Lab and other FDM 3D printers"
 description		"Bambu Studio prepares 3D models for printing: it arranges and \

@@ -1,0 +1,10 @@
+// The MIME type text/x-gcode, shipped in the package's data/mime_db (see tools/haiku/stage-mime-db.sh).
+resource(1, "META:TYPE") "text/x-gcode";
+resource(2, "META:S:DESC") #'MSDC' "G-code";
+resource(3, "META:L:DESC") #'MLDC' "G-code for 3D printers and CNC machines";
+resource(4, "META:PREF_APP") #'MSIG' "application/x-vnd.airos-BambuStudio";
+resource(5, "META:EXTENS") message(234) {
+	"extensions" = "gcode",
+	"extensions" = "gco",
+	"type" = "text/x-gcode"
+};

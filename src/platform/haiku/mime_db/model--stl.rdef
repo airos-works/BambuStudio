@@ -1,0 +1,9 @@
+// The MIME type model/stl, shipped in the package's data/mime_db (see tools/haiku/stage-mime-db.sh).
+resource(1, "META:TYPE") "model/stl";
+resource(2, "META:S:DESC") #'MSDC' "STL model";
+resource(3, "META:L:DESC") #'MLDC' "STL (stereolithography) 3D model";
+resource(4, "META:PREF_APP") #'MSIG' "application/x-vnd.airos-BambuStudio";
+resource(5, "META:EXTENS") message(234) {
+	"extensions" = "stl",
+	"type" = "model/stl"
+};

@@ -1,0 +1,9 @@
+// The MIME type model/3mf, shipped in the package's data/mime_db (see tools/haiku/stage-mime-db.sh).
+resource(1, "META:TYPE") "model/3mf";
+resource(2, "META:S:DESC") #'MSDC' "3MF model";
+resource(3, "META:L:DESC") #'MLDC' "3D Manufacturing Format model or project";
+resource(4, "META:PREF_APP") #'MSIG' "application/x-vnd.airos-BambuStudio";
+resource(5, "META:EXTENS") message(234) {
+	"extensions" = "3mf",
+	"type" = "model/3mf"
+};

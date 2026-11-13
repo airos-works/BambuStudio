@@ -1,0 +1,11 @@
+// The MIME type model/step, shipped in the package's data/mime_db (see tools/haiku/stage-mime-db.sh).
+resource(1, "META:TYPE") "model/step";
+resource(2, "META:S:DESC") #'MSDC' "STEP model";
+resource(3, "META:L:DESC") #'MLDC' "STEP (ISO 10303-21) CAD model";
+resource(4, "META:SNIFF_RULE") "0.60 (\"ISO-10303-21;\")";
+resource(5, "META:PREF_APP") #'MSIG' "application/x-vnd.airos-BambuStudio";
+resource(6, "META:EXTENS") message(234) {
+	"extensions" = "step",
+	"extensions" = "stp",
+	"type" = "model/step"
+};

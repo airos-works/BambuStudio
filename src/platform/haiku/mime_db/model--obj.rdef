@@ -1,0 +1,9 @@
+// The MIME type model/obj, shipped in the package's data/mime_db (see tools/haiku/stage-mime-db.sh).
+resource(1, "META:TYPE") "model/obj";
+resource(2, "META:S:DESC") #'MSDC' "OBJ model";
+resource(3, "META:L:DESC") #'MLDC' "Wavefront OBJ 3D model";
+resource(4, "META:PREF_APP") #'MSIG' "application/x-vnd.airos-BambuStudio";
+resource(5, "META:EXTENS") message(234) {
+	"extensions" = "obj",
+	"type" = "model/obj"
+};

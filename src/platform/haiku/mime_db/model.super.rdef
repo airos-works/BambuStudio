@@ -1,0 +1,3 @@
+// The MIME type model, shipped in the package's data/mime_db (see tools/haiku/stage-mime-db.sh).
+resource(1, "META:TYPE") "model";
+resource(2, "META:S:DESC") #'MSDC' "3D model";
