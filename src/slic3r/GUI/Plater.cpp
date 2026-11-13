@@ -15980,6 +15980,14 @@ void Plater::priv::set_current_panel(wxPanel* panel, bool no_slice)
         if (p != current_panel)
             p->Hide();
     }
+#ifdef __WXHAIKU__
+    // The three panels share one sizer. Give the shown one the whole area now:
+    // otherwise the first frame is rendered in a third of the width (before the
+    // next size event of the container), and the camera's pending "zoom to bed"
+    // is computed for that width.
+    if (wxWindow *container = current_panel->GetParent())
+        container->Layout();
+#endif
 
     update_sidebar(true);
 
