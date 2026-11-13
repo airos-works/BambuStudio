@@ -7,6 +7,8 @@
 #
 #   - resources/model/Bambu_Cube_V2.stl (a 20 mm cube)
 #   - tests/data/test_3mf/Geräte/Büchse.3mf (a 3MF with a non-ASCII path)
+#   - tests/data/20mm_cube.obj and Open CASCADE's sample screw.step (the OBJ
+#     and STEP importers)
 #   - resources/model/ksr_FDMTest.stl (the bigger FDM test piece; skipped
 #     with SLICE_TEST_QUICK=1, which is the default for the emulated arm64)
 #
@@ -40,7 +42,10 @@ for dir in profiles profiles_template info printers flush filament_mixing data; 
 	cp -rL "$BS_ROOT/resources/$dir" "$payload/BambuStudio/resources/"
 done
 cp "$BS_ROOT/resources/model/Bambu_Cube_V2.stl" "$BS_ROOT/resources/model/ksr_FDMTest.stl" "$payload/models/"
-cp "$BS_ROOT/tests/data/test_3mf/Geräte/Büchse.3mf" "$payload/models/"
+cp "$BS_ROOT/tests/data/test_3mf/Geräte/Büchse.3mf" "$BS_ROOT/tests/data/20mm_cube.obj" "$payload/models/"
+# a STEP file: Open CASCADE's own sample, if its source is unpacked
+step_sample=$(ls "$BS_DEPS_SRC"/occt-*/data/step/screw.step 2>/dev/null | head -n 1)
+[[ -z $step_sample ]] || cp "$step_sample" "$payload/models/"
 
 cat > "$payload/run.sh" <<RUN
 CLI=/payload/BambuStudio/bin/bambu-studio-cli
@@ -66,6 +71,10 @@ step \$CLI --debug 2 --printer "\$PRINTER" --info --slice 1 --outputdir /payload
 	--export-3mf cube.gcode.3mf /payload/models/Bambu_Cube_V2.stl
 step \$CLI --debug 2 --printer "\$PRINTER" --info --slice 1 --outputdir /payload/out/buechse \\
 	--export-3mf "Büchse.gcode.3mf" "/payload/models/Büchse.3mf"
+step \$CLI --debug 2 --printer "\$PRINTER" --info --slice 1 --outputdir /payload/out/obj /payload/models/20mm_cube.obj
+if [ -f /payload/models/screw.step ]; then
+	step \$CLI --debug 2 --printer "\$PRINTER" --info --slice 1 --outputdir /payload/out/step /payload/models/screw.step
+fi
 if [ \$QUICK -eq 0 ]; then
 	step \$CLI --debug 2 --printer "\$PRINTER" --info --orient 1 --slice 1 --outputdir /payload/out/fdmtest \\
 		--export-3mf fdmtest.gcode.3mf /payload/models/ksr_FDMTest.stl
