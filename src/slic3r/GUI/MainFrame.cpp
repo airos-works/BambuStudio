@@ -1,5 +1,8 @@
 #include "MainFrame.hpp"
 #include "GLToolbar.hpp"
+#ifdef __WXHAIKU__
+#include <wx/evtloop.h>
+#endif
 #include <wx/panel.h>
 #include <wx/notebook.h>
 #include <wx/listbook.h>
@@ -501,6 +504,39 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
     // declare events
     Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
         BOOST_LOG_TRIVIAL(info) << "mainframe received close_widow event";
+#ifdef __WXHAIKU__
+        // HAIKU-TODO(wx): B_QUIT_REQUESTED (Deskbar "Quit application", Cmd+Q
+        // in a dialog, shutdown) closes every top level window, dialogs first,
+        // even while a modal dialog runs: the frame would be deleted under the
+        // dialog's event loop, and the dialog lives on the stack of its caller.
+        // The other ports cannot close a frame that a modal dialog disables.
+        // Remove when the wx port refuses the quit itself (WX-REQUESTS #18).
+        if (event.CanVeto()) {
+            static int s_deferred = 0;
+            // a dialog still waits for its answer: that comes first
+            for (wxWindow *top : wxTopLevelWindows) {
+                wxDialog *dlg = dynamic_cast<wxDialog *>(top);
+                if (dlg != nullptr && dlg->IsModal()) {
+                    event.Veto();
+                    dlg->Raise();
+                    s_deferred = 0;
+                    BOOST_LOG_TRIVIAL(info) << "cancelled: a modal dialog is open";
+                    return;
+                }
+            }
+            // the loop of a dialog (or menu) that has just ended is still on
+            // the stack: close when the main loop is back
+            wxEventLoopBase *loop = wxEventLoopBase::GetActive();
+            if (loop != nullptr && !loop->IsMain() && s_deferred < 20) {
+                ++s_deferred;
+                event.Veto();
+                CallAfter([this] { Close(); });
+                BOOST_LOG_TRIVIAL(info) << "deferred: inside a nested event loop";
+                return;
+            }
+            s_deferred = 0;
+        }
+#endif
         if (event.CanVeto() && m_plater->get_view3D_canvas3D()->get_gizmos_manager().is_in_editing_mode(true)) {
             // prevents to open the save dirty project dialog
             event.Veto();
