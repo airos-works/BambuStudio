@@ -3299,6 +3299,14 @@ bool GUI_App::on_init_inner()
 
     init_live_view_track_context(app_config);
 
+#ifdef __WXHAIKU__
+    // The colour mode follows the system's colours (Appearance preferences),
+    // also while the application runs (wxEVT_SYS_COLOUR_CHANGED). Take the
+    // system's state before the first colour is chosen: the saved value is
+    // the one of the last session.
+    if (app_config)
+        app_config->set("dark_color_mode", wxSystemSettings::GetAppearance().IsDark() ? "1" : "0");
+#endif
 // initialize label colors and fonts
     if (app_config) {
         ::Label::initSysFont(app_config->get_language_code(), false);
