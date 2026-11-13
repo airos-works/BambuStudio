@@ -37,12 +37,16 @@ int main()
         check(near(out.at<cv::Vec3b>(2, 0), 82, 207, 20), "RGB2Lab blue = (82, 207, 20)");
         check(near(out.at<cv::Vec3b>(3, 0), 255, 128, 128), "RGB2Lab white = (255, 128, 128)");
         cv::cvtColor(out, back, cv::COLOR_Lab2RGB);
+        // 8-bit a and b lose precision that the sRGB curve amplifies near black
         bool round_trip = true;
         for (int i = 0; i < 4; ++i) {
             const cv::Vec3b a = rgb.at<cv::Vec3b>(i, 0), b = back.at<cv::Vec3b>(i, 0);
-            round_trip = round_trip && near(b, a[0], a[1], a[2], 3);
+            if (!near(b, a[0], a[1], a[2], 8)) {
+                std::printf("      (%d, %d, %d) came back as (%d, %d, %d)\n", a[0], a[1], a[2], b[0], b[1], b[2]);
+                round_trip = false;
+            }
         }
-        check(round_trip, "Lab2RGB(RGB2Lab(x)) = x within 3");
+        check(round_trip, "Lab2RGB(RGB2Lab(x)) = x within 8");
         cv::cvtColor(rgb, out, cv::COLOR_RGB2HSV);
         check(near(out.at<cv::Vec3b>(0, 0), 0, 255, 255, 0), "RGB2HSV red = (0, 255, 255)");
         check(near(out.at<cv::Vec3b>(1, 0), 60, 255, 255, 0), "RGB2HSV green = (60, 255, 255)");
@@ -174,8 +178,11 @@ int main()
         for (int y = 0; y < 12; ++y)
             for (int x = 0; x < 12; ++x)
                 filled += drawn.at<uchar>(y, x) != 0;
-        // the hole's border runs along the square's pixels around it: its polygon covers the 4x4 block
-        check(filled == 36 - 16, "drawContours of the hole border clears the block it bounds");
+        // The hole's border is the 8 pixels of the square that touch the 2x2
+        // hole by an edge: an octagon of 12 pixels with the hole.
+        if (filled != 36 - 12)
+            std::printf("      %d pixels left, the hole border has %d points\n", filled, hole >= 0 ? static_cast<int>(contours[hole].size()) : -1);
+        check(filled == 36 - 12, "drawContours of the hole border clears the octagon it bounds");
         std::vector<std::vector<cv::Point>> all;
         cv::findContours(mask, all, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
         check(all.size() == 2, "RETR_EXTERNAL: the square and the pixel");

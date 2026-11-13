@@ -451,9 +451,15 @@ int run(int argc, char **argv)
             std::vector<Preset *>      project_presets;
             bool                       is_bbl_3mf = false;
             Semver                     file_version;
-            Model loaded = Model::read_from_file(file, &file_config, &substitutions,
-                LoadStrategy::LoadModel | LoadStrategy::LoadConfig | LoadStrategy::AddDefaultInstances,
-                &loaded_plates, &project_presets, &is_bbl_3mf, &file_version);
+            Model loaded;
+            if (boost::algorithm::iends_with(file, ".step") || boost::algorithm::iends_with(file, ".stp"))
+                // tessellated with the application's default deflections
+                loaded = Model::read_from_step(file, LoadStrategy::LoadModel | LoadStrategy::AddDefaultInstances, nullptr, nullptr, nullptr,
+                                               0.003, 0.5, false);
+            else
+                loaded = Model::read_from_file(file, &file_config, &substitutions,
+                    LoadStrategy::LoadModel | LoadStrategy::LoadConfig | LoadStrategy::AddDefaultInstances,
+                    &loaded_plates, &project_presets, &is_bbl_3mf, &file_version);
             if (is_bbl_3mf && !file_config.empty() && model.objects.empty()) {
                 is_project = true;
                 // the project's own settings unless presets were asked for

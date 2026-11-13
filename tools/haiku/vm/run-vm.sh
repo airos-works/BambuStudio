@@ -3,8 +3,7 @@
 #
 # Boots a current air/OS image in QEMU with PAYLOAD_DIR as a second (BFS)
 # volume, runs PAYLOAD_DIR/run.sh in the guest, shuts the guest down and
-# copies what the script left in /payload/out back to PAYLOAD_DIR/out (both
-# ways as a tar archive on the volume). The
+# copies what the script left in /payload/out back to PAYLOAD_DIR/out. The
 # script's output is PAYLOAD_DIR/out/output.log, its exit status
 # PAYLOAD_DIR/out/exit-code; the guest's serial log is VM_DIR/serial.log.
 #
@@ -76,13 +75,12 @@ if [ ! -f /payload/run.sh ]; then
 	exit 0
 fi
 cd /payload
-if [ -f payload.tar ]; then
-	tar -xf payload.tar && rm payload.tar
+if [ -f payload.hpkg ]; then
+	package extract -C /payload payload.hpkg && rm payload.hpkg .PackageInfo
 fi
 mkdir -p /payload/out
 ( sh /payload/run.sh; echo $? > /payload/out/exit-code ) 2>&1 | tee /payload/out/output.log
 echo "VM RUNNER EXIT $(cat /payload/out/exit-code)"
-tar -cf /payload/out.tar out
 sync
 if [ -f /payload/keep-running ]; then
 	echo "VM RUNNER DONE (kept running)"
@@ -122,17 +120,33 @@ truncate -s "${VM_PAYLOAD_MB:-2048}M" "$payload"
 "$BFS_SHELL" --initialize "$payload" payload > "$VM_DIR/payload.log" 2>&1 \
 	|| { cat "$VM_DIR/payload.log" >&2; exit 1; }
 # As one archive, which the guest unpacks: bfs_shell's recursive copy of a
-# large tree runs out of transaction space and crashes.
-tar -cf "$VM_DIR/payload.tar" -C "$PAYLOAD" --exclude=./out --exclude=./run.sh .
+# large tree runs out of transaction space and crashes. A package archive,
+# because the system's own package tool is in every image (the arm64 images
+# have no tar).
+rm -rf "$PAYLOAD/out"
+cat > "$VM_DIR/payload.PackageInfo" <<INFO
+name			bambustudio_test_payload
+version			1-1
+architecture	any
+summary			"Test payload"
+description		"The files tools/haiku/vm/run-vm.sh hands to its guest."
+packager		"run-vm.sh"
+vendor			"run-vm.sh"
+copyrights		{ "none" }
+licenses		{ "Public Domain" }
+provides		{ bambustudio_test_payload = 1 }
+INFO
+rm -f "$VM_DIR/payload.hpkg"
+"$TOOLS/package/package" create -q -0 -C "$PAYLOAD" -i "$VM_DIR/payload.PackageInfo" "$VM_DIR/payload.hpkg"
 {
-	echo "cp :$VM_DIR/payload.tar /myfs/payload.tar"
+	echo "cp :$VM_DIR/payload.hpkg /myfs/payload.hpkg"
 	echo "cp :$PAYLOAD/run.sh /myfs/run.sh"
 	if [[ ${VM_KEEP:-0} == 1 ]]; then echo "mkdir /myfs/keep-running"; fi
 	echo sync
 	echo quit
 } | "$BFS_SHELL" "$payload" >> "$VM_DIR/payload.log" 2>&1 \
 	|| { tail -20 "$VM_DIR/payload.log" >&2; exit 1; }
-rm -f "$VM_DIR/payload.tar"
+rm -f "$VM_DIR/payload.hpkg" "$VM_DIR/payload.PackageInfo"
 
 # --- boot
 serial=$VM_DIR/serial.log
@@ -200,14 +214,13 @@ trap - EXIT
 rm -f "$VM_DIR/qemu.pid"
 
 # --- results
-rm -rf "$PAYLOAD/out" "$VM_DIR/out.tar"
-mkdir -p "$PAYLOAD/out"
+# (the results are a few files: bfs_shell copies those reliably)
+rm -rf "$PAYLOAD/out"
 "$BFS_SHELL" "$payload" >> "$VM_DIR/payload.log" 2>&1 <<COMMANDS || true
-cp /myfs/out.tar :$VM_DIR/out.tar
+cp -r /myfs/out :$PAYLOAD/out
 quit
 COMMANDS
-[[ ! -f $VM_DIR/out.tar ]] || tar -xf "$VM_DIR/out.tar" -C "$PAYLOAD"
-rm -f "$VM_DIR/out.tar"
+mkdir -p "$PAYLOAD/out"
 case $state in
 done | off) ;;
 *)
