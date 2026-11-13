@@ -105,8 +105,12 @@ haiku_patches() {
 
 # cmake_dep SOURCE [cmake args]: configure, build and install into BS_DEPS.
 cmake_dep() {
-	local source=$1
+	local source=$1 home
 	shift
+	# A build tree configured from another checkout (the in-tree GLEW and
+	# libharu of a CI snapshot): CMake refuses it, so start afresh.
+	home=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$BUILD/CMakeCache.txt" 2>/dev/null || true)
+	[[ -z $home || $home == "$(cd "$source" && pwd)" ]] || rm -rf "$BUILD"
 	cmake -S "$source" -B "$BUILD" -G Ninja \
 		-DCMAKE_TOOLCHAIN_FILE="$BS_TOOLCHAIN" -DHAIKU_ARCH="$HAIKU_ARCH" \
 		-DHAIKU_SDK="$HAIKU_SDK" -DAIROS_DEPS="$AIROS_DEPS" -DBS_DEPS="$BS_DEPS" \
