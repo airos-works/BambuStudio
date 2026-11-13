@@ -3,9 +3,10 @@
 #
 # Fetches the wxWidgets commit pinned in tools/haiku/wx.lock into
 # BS_SCRATCH/wx-src and builds it with the port's own build/haiku/build.sh:
-# build tree BS_SCRATCH/wx-build/ARCH, install prefix BS_SCRATCH/wx-install/ARCH
-# (the default WX_PREFIX of build.sh --gui). Nothing is rebuilt when the
-# prefix already holds that commit.
+# build tree BS_SCRATCH/wx-pinned-build/ARCH, install prefix
+# BS_SCRATCH/wx-pinned/ARCH (pass it to build.sh --gui as WX_PREFIX; build.sh's
+# default, BS_SCRATCH/wx-install, is the prefix of a wx development tree).
+# Nothing is rebuilt when the prefix already holds that commit.
 #
 # Inputs: see tools/haiku/env.sh (HAIKU_SDK, AIROS_DEPS, BS_SCRATCH, BS_JOBS);
 # WX_SRC overrides the source directory (a local checkout is used as it is).
@@ -16,7 +17,7 @@ ARCH=${1:?usage: build-wx.sh x86_64|arm64}
 
 read -r _ repo < <(grep '^repository ' "$HERE/wx.lock")
 read -r _ commit < <(grep '^commit ' "$HERE/wx.lock")
-prefix=$BS_SCRATCH/wx-install/$HAIKU_ARCH
+prefix=$BS_SCRATCH/wx-pinned/$HAIKU_ARCH
 stamp=$prefix/.wx-commit
 
 if [[ -n ${WX_SRC:-} ]]; then
@@ -35,7 +36,7 @@ fi
 
 # HAIKU_SDK is .../sdk/ARCH and AIROS_DEPS .../deps/ARCH: the port's script
 # takes their parents.
-WX_BUILD_ROOT=$BS_SCRATCH/wx-build WX_INSTALL_ROOT=$BS_SCRATCH/wx-install \
+WX_BUILD_ROOT=$BS_SCRATCH/wx-pinned-build WX_INSTALL_ROOT=$BS_SCRATCH/wx-pinned \
 	AIROS_SDK=$(dirname "$HAIKU_SDK") AIROS_DEPS=$(dirname "$AIROS_DEPS") \
 	WX_JOBS=$BS_JOBS "$src/build/haiku/build.sh" "$HAIKU_ARCH"
 echo "$commit" > "$stamp"
