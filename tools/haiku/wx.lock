@@ -2,4 +2,4 @@
 # (Bambu Lab's wxWidgets 3.1.5 with the native Haiku port, wxHaiku).
 # tools/haiku/build-wx.sh builds exactly this commit.
 repository https://github.com/airos-works/wxWidgets.git
-commit 4076035d214a41124c6c203ca0cf349002c79e96
+commit 46912e9b21abafa3cc0852e8a0ee6cc914414dfa
