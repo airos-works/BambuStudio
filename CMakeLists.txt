@@ -71,7 +71,8 @@ if(NOT SLIC3R_ENABLE_OPENMESHCRAFT_BOOLEAN AND NOT SLIC3R_ALLOW_MCUT_BOOLEAN)
         "Keep SLIC3R_ENABLE_OPENMESHCRAFT_BOOLEAN=ON, or pass -DSLIC3R_ALLOW_MCUT_BOOLEAN=ON.")
 endif()
 # If SLIC3R_FHS is 1 -> SLIC3R_DESKTOP_INTEGRATION is always 0, othrewise variable.
-CMAKE_DEPENDENT_OPTION(SLIC3R_DESKTOP_INTEGRATION "Allow performing desktop integration during runtime" 1 "NOT SLIC3R_FHS" 0)
+# Not on Haiku either: the package carries the Deskbar entry and the file types.
+CMAKE_DEPENDENT_OPTION(SLIC3R_DESKTOP_INTEGRATION "Allow performing desktop integration during runtime" 1 "NOT SLIC3R_FHS;NOT HAIKU" 0)
 
 set(OPENVDB_FIND_MODULE_PATH "" CACHE PATH "Path to OpenVDB installation's find modules.")
 

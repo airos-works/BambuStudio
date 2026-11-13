@@ -3,8 +3,12 @@ project(libslic3r)
 
 include(PrecompiledHeader)
 
-string(TIMESTAMP COMPILE_TIME %Y%m%d-%H%M%S)
-set(SLIC3R_BUILD_TIME ${COMPILE_TIME})
+# SLIC3R_BUILD_TIME may be given (-DSLIC3R_BUILD_TIME=...): a fixed value keeps
+# libslic3r_version.h, and with it every object, unchanged across configurations.
+if (NOT SLIC3R_BUILD_TIME)
+    string(TIMESTAMP COMPILE_TIME %Y%m%d-%H%M%S)
+    set(SLIC3R_BUILD_TIME ${COMPILE_TIME})
+endif ()
 
 if("${BBL_RELEASE_TO_PUBLIC}" STREQUAL "0")
 execute_process(
