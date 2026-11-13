@@ -36,6 +36,10 @@ def scale_down(path, above, side):
         if max(image.size) <= above:
             return False
         factor = side / max(image.size)
+        if image.mode not in ('RGB', 'RGBA', 'L', 'LA'):
+            # palette pictures (two Creality build plates): Pillow resamples
+            # only full-colour or grey ones with LANCZOS
+            image = image.convert('RGBA')
         small = image.resize((round(image.width * factor), round(image.height * factor)), Image.LANCZOS)
     small.save(path, optimize=True)
     return True
