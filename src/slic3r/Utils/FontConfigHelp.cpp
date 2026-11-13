@@ -1,5 +1,21 @@
 #include "FontConfigHelp.hpp"
 
+#ifdef __HAIKU__
+
+#include "libslic3r/HaikuUtils.hpp"
+
+std::string Slic3r::GUI::get_font_path(const wxFont &font, bool reload_fonts)
+{
+    if (reload_fonts)
+        Slic3r::Haiku::installed_fonts(true);
+    const std::string family(font.GetFaceName().utf8_str().data());
+    const Slic3r::Haiku::FontFace *face = Slic3r::Haiku::find_font(family, font.GetWeight() >= wxFONTWEIGHT_BOLD,
+                                                                   font.GetStyle() != wxFONTSTYLE_NORMAL);
+    return face != nullptr ? face->path : std::string();
+}
+
+#endif // __HAIKU__
+
 #ifdef EXIST_FONT_CONFIG_INCLUDE
 
 #include <wx/filename.h>

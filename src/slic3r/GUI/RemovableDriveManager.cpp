@@ -25,6 +25,9 @@
 #include <boost/filesystem/convenience.hpp>
 #include <boost/process.hpp>
 #endif
+#ifdef __HAIKU__
+#include "RemovableDriveManagerHaiku.hpp"
+#endif
 
 namespace Slic3r {
 namespace GUI { 
@@ -233,6 +236,12 @@ std::vector<DriveData> RemovableDriveManager::search_for_removable_drives() cons
 
 	this->list_devices(current_drives);
 
+#elif defined(__HAIKU__)
+
+	// The Storage Kit knows which volumes are on removable devices.
+	for (const std::pair<std::string, std::string> &volume : Haiku::removable_volumes())
+		current_drives.emplace_back(DriveData{ volume.first, volume.second });
+
 #else
 
    	if (platform_flavor() == PlatformFlavor::LinuxOnChromium) {
@@ -303,6 +312,14 @@ void RemovableDriveManager::eject_drive()
 		// but neither triggers "succesful safe removal messege"
 		
 		BOOST_LOG_TRIVIAL(info) << "Ejecting started";
+#ifdef __HAIKU__
+		// Unmounted (and the medium ejected) through the Storage Kit, no umount command.
+		const bool success = Haiku::eject_volume(correct_path);
+		if (success)
+			BOOST_LOG_TRIVIAL(info) << "Ejecting finished";
+		else
+			BOOST_LOG_TRIVIAL(error) << "Ejecting failed: the volume is busy or gone";
+#else
 		boost::process::ipstream istd_err;
     	boost::process::child child(
 #if __APPLE__		
@@ -335,6 +352,7 @@ void RemovableDriveManager::eject_drive()
 				success = true;
 			}
 		}
+#endif // __HAIKU__
 		assert(m_callback_evt_handler);
 		if (m_callback_evt_handler) 
 			wxPostEvent(m_callback_evt_handler, RemovableDriveEjectEvent(EVT_REMOVABLE_DRIVE_EJECTED, std::pair<DriveData, bool>(drive_data, success)));

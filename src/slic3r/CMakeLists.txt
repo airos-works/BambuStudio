@@ -823,9 +823,16 @@ else ()
         )
 endif ()
 
-if (UNIX AND NOT APPLE)
+if (UNIX AND NOT APPLE AND NOT HAIKU)
     list(APPEND SLIC3R_GUI_SOURCES
         GUI/Printer/gstbambusrc.c
+    )
+endif ()
+
+if (HAIKU)
+    list(APPEND SLIC3R_GUI_SOURCES
+        GUI/RemovableDriveManagerHaiku.cpp
+        GUI/RemovableDriveManagerHaiku.hpp
     )
 endif ()
 
@@ -880,7 +887,15 @@ endif ()
 
 target_link_libraries(libslic3r_gui libslic3r cereal imgui imguizmo minilzo GLEW::GLEW OpenGL::GL hidapi
     ${HPDF_LIBRARY}
-    ${wxWidgets_LIBRARIES} glfw libcurl OpenSSL::SSL OpenSSL::Crypto)
+    ${wxWidgets_LIBRARIES} libcurl OpenSSL::SSL OpenSSL::Crypto)
+if (HAIKU)
+    # No GLFW there: the off-screen context of the command line slicer's
+    # thumbnails is the Be API's. The kits used directly: application,
+    # interface and storage (libbe), sockets (libnetwork).
+    target_link_libraries(libslic3r_gui be network)
+else ()
+    target_link_libraries(libslic3r_gui glfw)
+endif ()
 #target_link_libraries(libslic3r_gui libslic3r cereal imgui imguizmo minilzo GLEW::GLEW OpenGL::GL hidapi libcurl OpenSSL::SSL OpenSSL::Crypto ${wxWidgets_LIBRARIES} glfw)
 
 if (MSVC)
@@ -908,7 +923,7 @@ if (SLIC3R_STATIC)
     target_compile_definitions(libslic3r_gui PUBLIC -DwxDEBUG_LEVEL=0)
 endif()
 
-if (SLIC3R_STATIC AND NOT SLIC3R_STATIC_EXCLUDE_CURL AND UNIX AND NOT APPLE)
+if (SLIC3R_STATIC AND NOT SLIC3R_STATIC_EXCLUDE_CURL AND UNIX AND NOT APPLE AND NOT HAIKU)
     target_compile_definitions(libslic3r_gui PRIVATE OPENSSL_CERT_OVERRIDE)
 endif ()
 
@@ -950,7 +965,15 @@ if (WIN32)
     endif ()
 endif ()
 
-if (NOT APPLE)
+if (HAIKU)
+    # The system's FFmpeg (no pkg-config when cross-compiling).
+    find_path(LIBAV_INCLUDE_DIR libavcodec/avcodec.h REQUIRED)
+    find_library(LIBAV_AVCODEC_LIBRARY avcodec REQUIRED)
+    find_library(LIBAV_SWSCALE_LIBRARY swscale REQUIRED)
+    find_library(LIBAV_AVUTIL_LIBRARY avutil REQUIRED)
+    target_include_directories(libslic3r_gui PRIVATE ${LIBAV_INCLUDE_DIR})
+    target_link_libraries(libslic3r_gui ${LIBAV_AVCODEC_LIBRARY} ${LIBAV_SWSCALE_LIBRARY} ${LIBAV_AVUTIL_LIBRARY})
+elseif (NOT APPLE)
     pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
         libavcodec
         libswscale
@@ -962,7 +985,9 @@ endif()
 # We need to implement some hacks for wxWidgets and touch the underlying GTK
 # layer and sub-libraries. This forces us to use the include locations and
 # link these libraries.
-if (UNIX AND NOT APPLE)
+# None of this on Haiku: the wxWidgets port there is on the Be API, its web
+# view on the system's WebKit, and video comes from the Media Kit.
+if (UNIX AND NOT APPLE AND NOT HAIKU)
     find_package(GTK${SLIC3R_GTK} REQUIRED)
     target_include_directories(libslic3r_gui PRIVATE ${GTK${SLIC3R_GTK}_INCLUDE_DIRS})
     target_link_libraries(libslic3r_gui ${GTK${SLIC3R_GTK}_LIBRARIES})

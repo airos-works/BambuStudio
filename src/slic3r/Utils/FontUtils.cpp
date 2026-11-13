@@ -9,7 +9,7 @@
 #include <wx/uri.h>
 #include <wx/fontutil.h> // wxNativeFontInfo
 #include <wx/osx/core/cfdictionary.h>
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__HAIKU__)
 #include "FontConfigHelp.hpp"
 #endif
 
@@ -242,7 +242,7 @@ std::unique_ptr<FontFile> create_font_file(const wxFont &font)
         return nullptr;
     }
     return create_font_file(file_path.c_str());
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__HAIKU__)
     std::string font_path = Slic3r::GUI::get_font_path(font);
     if (font_path.empty()) {
         BOOST_LOG_TRIVIAL(error) << "Can not read font('" << get_human_readable_name(font) << "'), "
@@ -302,7 +302,7 @@ bool can_load(const wxFont &font)
     return hfont != nullptr;
 #elif defined(__APPLE__)
     return true;
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__HAIKU__)
     return true;
 #endif
     return false;

@@ -6,7 +6,9 @@
 #define EXIST_FONT_CONFIG_INCLUDE
 #endif
 
-#ifdef EXIST_FONT_CONFIG_INCLUDE
+// Haiku has no fontconfig: get_font_path() looks the face up in the installed
+// fonts there (libslic3r/HaikuUtils.hpp).
+#if defined(EXIST_FONT_CONFIG_INCLUDE) || defined(__HAIKU__)
 #include <wx/font.h>
 namespace Slic3r::GUI {
 
@@ -22,5 +24,5 @@ namespace Slic3r::GUI {
 std::string get_font_path(const wxFont &font, bool reload_fonts = false);
 
 } // namespace Slic3r
-#endif // EXIST_FONT_CONFIG_INCLUDE
+#endif // EXIST_FONT_CONFIG_INCLUDE || __HAIKU__
 #endif // slic3r_FontConfigHelp_hpp_

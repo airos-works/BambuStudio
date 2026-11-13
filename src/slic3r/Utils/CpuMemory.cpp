@@ -1,5 +1,8 @@
 #include "CpuMemory.hpp"
 #include "libslic3r/Log.hpp"
+#ifdef __HAIKU__
+#include "libslic3r/HaikuUtils.hpp"
+#endif
 
 namespace Slic3r {
 #ifdef _WIN32
@@ -54,6 +57,8 @@ unsigned long long get_free_memory()
     return get_free_memory_win();
 #elif defined(__linux__) || defined(__APPLE__)
     return get_free_memory_unix();
+#elif defined(__HAIKU__)
+    return Haiku::free_memory();
 #else
     return 0;
 #endif
