@@ -9,7 +9,11 @@
 #include <InterfaceDefs.h>
 #include <Message.h>
 #include <Messenger.h>
+#include <Mime.h>
+#include <MimeType.h>
 #include <Node.h>
+#include <TypeConstants.h>
+#include <fs_attr.h>
 #include <OS.h>
 #include <Path.h>
 #include <Roster.h>
@@ -175,6 +179,114 @@ size_t memory_mb()
     if (get_system_info(&info) != B_OK)
         return 0;
     return (size_t) (((uint64) info.max_pages * B_PAGE_SIZE) >> 20);
+}
+
+bool has_stale_zink_queue(const std::string &gl_renderer)
+{
+    std::string renderer = gl_renderer;
+    for (char &c : renderer)
+        c = char(tolower((unsigned char) c));
+    if (renderer.find("zink") != std::string::npos)
+        return false; // Zink renders: its queue is alive and well
+    thread_info info;
+    int32       cookie = 0;
+    while (get_next_thread_info(B_CURRENT_TEAM, &cookie, &info) == B_OK) {
+        const char *colon = strrchr(info.name, ':');
+        const char *name  = colon != nullptr ? colon + 1 : info.name;
+        if (strncmp(name, "zfq", 3) == 0)
+            return true;
+    }
+    return false;
+}
+
+static team_id get_team_id()
+{
+    thread_info info;
+    return get_thread_info(find_thread(nullptr), &info) == B_OK ? info.team : -1;
+}
+
+void type_saved_file(const std::string &path)
+{
+    // What the application writes is known by its extension. The system's
+    // guess would not do: a 3MF is a ZIP archive to the sniffer (and other
+    // OPC formats start alike, so no rule can tell them apart), and the
+    // registrar takes the extensions of a type registered while it runs into
+    // account only after its next start (Haiku: Database::SetFileExtensions()
+    // does not update its extension index).
+    static const struct { const char *extension; const char *type; } known[] = {
+        { ".3mf", "model/3mf" }, { ".stl", "model/stl" }, { ".step", "model/step" }, { ".stp", "model/step" },
+        { ".obj", "model/obj" }, { ".amf", "application/x-amf" }, { ".gcode", "text/x-gcode" },
+    };
+    std::string lower = path;
+    for (char &c : lower)
+        c = char(tolower((unsigned char) c));
+    for (const auto &k : known) {
+        const size_t n = strlen(k.extension);
+        if (lower.size() > n && lower.compare(lower.size() - n, n, k.extension) == 0) {
+            BNode node(path.c_str());
+            attr_info info;
+            if (node.InitCheck() == B_OK && node.GetAttrInfo("BEOS:TYPE", &info) != B_OK)
+                node.WriteAttr("BEOS:TYPE", B_MIME_STRING_TYPE, 0, k.type, strlen(k.type) + 1);
+            return;
+        }
+    }
+    update_mime_info(path.c_str(), false, true, B_UPDATE_MIME_INFO_NO_FORCE);
+}
+
+void register_document_types(const char *app_signature)
+{
+    app_info info;
+    if (app_signature == nullptr) {
+        // the signature of this application (its resources)
+        if (be_roster->GetRunningAppInfo(find_thread(nullptr) >= 0 ? get_team_id() : -1, &info) != B_OK)
+            return;
+        app_signature = info.signature;
+    }
+    struct DocumentType
+    {
+        const char *type;
+        const char *short_desc;
+        const char *long_desc;
+        std::vector<const char *> extensions;
+        const char *sniffer_rule; // nullptr: the format has no reliable signature
+    };
+    // 3MF is a ZIP archive and STL/OBJ/G-code have no signature (an ASCII STL
+    // starting "solid" is too weak a rule): those are known by extension.
+    const DocumentType types[] = {
+        { "model/3mf", "3MF model", "3D Manufacturing Format model or project", { "3mf" }, nullptr },
+        { "model/stl", "STL model", "STL (stereolithography) 3D model", { "stl" }, nullptr },
+        { "model/step", "STEP model", "STEP (ISO 10303-21) CAD model", { "step", "stp" }, "0.60 (\"ISO-10303-21;\")" },
+        { "model/obj", "OBJ model", "Wavefront OBJ 3D model", { "obj" }, nullptr },
+        { "application/x-amf", "AMF model", "Additive Manufacturing File Format model", { "amf" }, nullptr },
+        { "text/x-gcode", "G-code", "G-code for 3D printers and CNC machines", { "gcode", "gco" }, nullptr },
+    };
+    for (const DocumentType &doc : types) {
+        BMimeType mime(doc.type);
+        if (mime.InitCheck() != B_OK)
+            continue;
+        if (!mime.IsInstalled() && mime.Install() != B_OK)
+            continue;
+        char text[B_MIME_TYPE_LENGTH];
+        if (mime.GetShortDescription(text) != B_OK || text[0] == '\0')
+            mime.SetShortDescription(doc.short_desc);
+        if (mime.GetLongDescription(text) != B_OK || text[0] == '\0')
+            mime.SetLongDescription(doc.long_desc);
+        BMessage extensions;
+        const char *known = nullptr;
+        if (mime.GetFileExtensions(&extensions) != B_OK || extensions.FindString("extensions", &known) != B_OK) {
+            BMessage add;
+            for (const char *ext : doc.extensions)
+                add.AddString("extensions", ext);
+            mime.SetFileExtensions(&add);
+        }
+        if (doc.sniffer_rule != nullptr) {
+            BString rule;
+            if (mime.GetSnifferRule(&rule) != B_OK || rule.IsEmpty())
+                mime.SetSnifferRule(doc.sniffer_rule);
+        }
+        if (mime.GetPreferredApp(text) != B_OK || text[0] == '\0')
+            mime.SetPreferredApp(app_signature);
+    }
 }
 
 } // namespace Haiku

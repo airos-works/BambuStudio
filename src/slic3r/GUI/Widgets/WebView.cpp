@@ -5,6 +5,9 @@
 #include "slic3r/GUI/I18N.hpp"
 #include "slic3r/GUI/MsgDialog.hpp"
 #include "slic3r/Utils/MacDarkMode.hpp"
+#ifdef __HAIKU__
+#include "slic3r/Utils/HaikuDesktop.hpp"
+#endif
 
 #include <chrono>
 #include <deque>
@@ -107,14 +110,47 @@ struct SummitWebViewDefaults
         setenv("SUMMIT_PREWARM_PROCESS", "0", 0);
         setenv("SUMMIT_WEBPROCESS_CACHE", "0", 0);
         wxWebViewSummit::SetDefaultNonPersistent(true);
-        // HAIKU-TODO(zink-teardown): a view that loads about:blank keeps its
-        // engine view: giving one back aborts the process in the GL kit's Zink
-        // add-on (STATUS-gui.md). Views that never had a page still have none.
+        // A view that loads about:blank keeps its engine view until
+        // WebView::OnOpenGLReady() found the GL renderer safe (see there).
         wxWebViewSummit::SetReleaseEngineOnBlank(false);
     }
 } s_summit_webview_defaults;
+std::optional<bool> s_engine_release; // decided once OpenGL is up
 } // namespace
 #endif
+
+bool WebView::CanReleaseEngine()
+{
+#ifdef __WXHAIKU__
+    return s_engine_release.value_or(false);
+#else
+    return true;
+#endif
+}
+
+void WebView::OnOpenGLReady(const std::string &gl_renderer)
+{
+#ifdef __WXHAIKU__
+    if (s_engine_release)
+        return;
+    // Zink before mesa-hgl 2e046a9 leaves a dead flush queue thread behind when
+    // it finds no Vulkan device (VMs, machines without a Vulkan driver) and
+    // falls back to softpipe; once that happened, an engine view that goes away
+    // aborts the process (ZINK-TEARDOWN). Then the views, the setup guide and
+    // the hidden Filament Manager page keep their web processes instead.
+    // BS_WEBVIEW_RELEASE=0/1 overrides the detection.
+    bool        release = !Slic3r::GUI::Haiku::has_stale_zink_queue(gl_renderer);
+    const char *env     = getenv("BS_WEBVIEW_RELEASE");
+    if (env != nullptr && *env != '\0')
+        release = *env != '0';
+    s_engine_release = release;
+    wxWebViewSummit::SetReleaseEngineOnBlank(release);
+    BOOST_LOG_TRIVIAL(info) << "WebView: GL renderer \"" << gl_renderer << "\": web engine views are "
+                            << (release ? "released when not needed" : "kept (stale Zink queue, ZINK-TEARDOWN)");
+#else
+    (void) gl_renderer;
+#endif
+}
 
 // Both defined below, next to the WebViewRef that owns the watcher instances.
 static Slic3r::GUI::WebViewWatcher *webview_watcher(wxWebView *webView);

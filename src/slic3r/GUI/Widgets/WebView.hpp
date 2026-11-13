@@ -36,6 +36,14 @@ public:
     // Windows: WebView2 CookieManager; macOS: WKHTTPCookieStore (default data store).
     static void ClearBambulabTokenCookies();
 
+    // Engine release. Whether a web view may give back its engine (web process)
+    // when it is hidden, blanked or destroyed. Always true, except on Haiku with
+    // a GL renderer add-on that aborts the process when an engine view goes
+    // away (Zink before mesa-hgl 2e046a9, ZINK-TEARDOWN): decided by
+    // OnOpenGLReady(), false until then.
+    static bool CanReleaseEngine();
+    static void OnOpenGLReady(const std::string &gl_renderer);
+
     // Backend setup.
     static wxString BuildEdgeUserDataPath();
 };

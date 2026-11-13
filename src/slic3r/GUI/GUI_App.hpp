@@ -881,6 +881,17 @@ public:
     std::string     get_http_url(std::string country_code, std::string path = {});
     std::string     get_model_http_url(std::string country_code);
     bool            is_compatibility_version();
+    // Whether Bambu's network plug-in exists for this platform at all (not
+    // whether it is installed): where it does not (Haiku), what needs it
+    // (account, cloud, user experience program) is not offered.
+    static constexpr bool network_plugin_supported()
+    {
+#ifdef __HAIKU__
+        return false;
+#else
+        return true;
+#endif
+    }
     bool            check_networking_version();
     void            cancel_networking_install();
     void            restart_networking();

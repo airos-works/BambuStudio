@@ -461,6 +461,11 @@ void GuideFrame::OnDocumentLoaded(wxWebViewEvent &evt)
     }
     UpdateState();
 
+    // Without the network plug-in nothing is collected: the page of the user
+    // experience program is answered with its own "Skip" (not joined).
+    if (!GUI_App::network_plugin_supported() && evt.GetURL() == NowUrl && NowUrl.Contains("/guide/3/index.html"))
+        WebView::RunScript(m_browser, "GotoSkipPage();");
+
     // wxCommandEvent *event = new
     // wxCommandEvent(EVT_WEB_RESPONSE_MESSAGE,this->GetId()); wxQueueEvent(this,
     // event);

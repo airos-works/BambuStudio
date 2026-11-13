@@ -1542,6 +1542,9 @@ wxWindow *PreferencesDialog::create_general_tab()
     if (wxGetApp().is_uep_force_disabled())
         priv_row->SetToolTip(minor_restricted_tip());
     sizer->Add(priv_row, flags);
+    // The user experience program collects through the network plug-in.
+    if (!GUI_App::network_plugin_supported())
+        priv_row->Hide();
     sizer->Add(wrap_option_row(scrolled, item_downloads), flags);
     scrolled->SetSizer(sizer);
     scrolled->FitInside();

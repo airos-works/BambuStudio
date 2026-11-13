@@ -37,6 +37,26 @@ std::string cpu_name();
 int         cpu_count();
 size_t      memory_mb();
 
+// True when the GL renderer add-on left a dead Zink flush queue behind in this
+// team: a thread named "...:zfq<N>" while the renderer is not Zink itself (the
+// add-on found no Vulkan device and fell back to softpipe). Fixed in mesa-hgl
+// 2e046a9; with an older add-on, giving back a web view's engine view aborts
+// the process (ZINK-TEARDOWN). Call after OpenGL was initialised.
+bool has_stale_zink_queue(const std::string &gl_renderer);
+
+// Gives a file the application wrote its MIME type (BEOS:TYPE, by extension
+// and content), as files saved by Haiku programs have, so that Tracker shows
+// and opens it right. A type already set stays.
+void type_saved_file(const std::string &path);
+
+// Makes the document types the application opens known to the system where
+// they are not: description, file extensions, a sniffer rule where the format
+// has a signature, and this application as the preferred one. Only what a
+// type lacks is filled in: types other applications defined or claimed keep
+// their settings. Cheap; called at every start. nullptr: this application's
+// signature.
+void register_document_types(const char *app_signature = nullptr);
+
 } // namespace Haiku
 } // namespace GUI
 } // namespace Slic3r

@@ -149,6 +149,9 @@
 #include "../Utils/PresetUpdater.hpp"
 #include "../Utils/Process.hpp"
 #include "../Utils/HelioDragon.hpp"
+#ifdef __HAIKU__
+#include "slic3r/Utils/HaikuDesktop.hpp"
+#endif
 #include "RemovableDriveManager.hpp"
 #include "InstanceCheck.hpp"
 #include "NotificationManager.hpp"
@@ -27243,6 +27246,15 @@ TriangleMesh Plater::combine_mesh_fff(const ModelObject& mo, int instance_id, st
 }
 
 // BBS export with/without boolean, however, stil merge mesh
+// store_stl() in binary, and on Haiku with the file's MIME type set.
+static void store_stl_typed(const std::string &path, TriangleMesh &mesh)
+{
+    Slic3r::store_stl(path.c_str(), &mesh, true);
+#ifdef __HAIKU__
+    Slic3r::GUI::Haiku::type_saved_file(path);
+#endif
+}
+
 void Plater::export_stl(bool extended, bool selection_only, bool multi_stls)
 {
     if (p->model.objects.empty()) { return; }
@@ -27441,7 +27453,7 @@ void Plater::export_stl(bool extended, bool selection_only, bool multi_stls)
                 auto mesh = mesh_to_export(*object, i.second);
                 mesh.translate(-object->origin_translation.cast<float>());
 
-                Slic3r::store_stl(get_save_file(path_u8, object->name).c_str(), &mesh, true);
+                store_stl_typed(get_save_file(path_u8, object->name), mesh);
             }
             return;
         }
@@ -27454,12 +27466,12 @@ void Plater::export_stl(bool extended, bool selection_only, bool multi_stls)
         for (const ModelObject* o : p->model.objects) {
             auto mesh = mesh_to_export(*o, -1);
             mesh.translate(-o->origin_translation.cast<float>());
-            Slic3r::store_stl(get_save_file(path_u8, o->name).c_str(), &mesh, true);
+            store_stl_typed(get_save_file(path_u8, o->name), mesh);
         }
         return;
     }
 
-    Slic3r::store_stl(path_u8.c_str(), &mesh, true);
+    store_stl_typed(path_u8, mesh);
 //    p->statusbar()->set_status_text(format_wxstr(_L("STL file exported to %s"), path));
 }
 
@@ -27814,6 +27826,9 @@ int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy 
         p->model.design_info = nullptr;
 
     if (store_result) {
+#ifdef __HAIKU__
+        Slic3r::GUI::Haiku::type_saved_file(path_u8);
+#endif
         if (!(store_params.strategy & SaveStrategy::Silence)) {
             // Success
             p->set_project_filename(path);

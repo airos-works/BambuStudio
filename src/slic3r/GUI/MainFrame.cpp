@@ -1519,9 +1519,11 @@ void MainFrame::init_tabpanel()
         // the user (not for the selection made while the window is built).
         if (panel == m_webview && m_webview != nullptr && IsShown() && wxGetApp().initialized())
             m_webview->load_deferred_pages();
-        // HAIKU-TODO(zink-teardown): no Suspend() of the hidden Filament
-        // Manager page (macOS does it below): giving an engine view back aborts
-        // the process in the GL kit's Zink add-on (STATUS-gui.md).
+        // As on macOS below, for another reason: a hidden page is a web process
+        // kept for nothing; a blank view gives its engine back (unless the GL
+        // renderer cannot take that, WebView::CanReleaseEngine()).
+        if (m_web_device && panel != m_web_device && WebView::CanReleaseEngine())
+            m_web_device->Suspend();
 #endif
 #if defined(__WXOSX__)
         // macOS root cause fix: suspend the Filament Manager WKWebView whenever it

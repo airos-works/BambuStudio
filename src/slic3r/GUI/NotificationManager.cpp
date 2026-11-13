@@ -32,6 +32,9 @@
 #endif
 #include <imgui/imgui_internal.h>
 #include "libslic3r/Log.hpp"
+#ifdef __HAIKU__
+#include "slic3r/Utils/HaikuDesktop.hpp"
+#endif
 
 static constexpr float GAP_WIDTH = 10.0f;
 static constexpr float SPACE_RIGHT_PANEL = 10.0f;
@@ -2443,6 +2446,10 @@ void NotificationManager::set_simplify_suggestion_multiline(const ObjectID oid, 
 
 void NotificationManager::push_exporting_finished_notification(const std::string& path, const std::string& dir_path, bool on_removable)
 {
+#ifdef __HAIKU__
+	// every successful export ends here: the file gets its MIME type
+	Haiku::type_saved_file(path);
+#endif
 	close_notification_of_type(NotificationType::ExportFinished);
 	NotificationData data{ NotificationType::ExportFinished, NotificationLevel::RegularNotificationLevel, on_removable ? 0 : 20,  _u8L("Export successfully.") + "\n" + path };
 	push_notification_data(std::make_unique<NotificationManager::ExportFinishedNotification>(data, m_id_provider, m_evt_handler, on_removable, path, dir_path), 0);

@@ -87,6 +87,9 @@
 #include "3DScene.hpp"
 #include "MainFrame.hpp"
 #include "slic3r/GUI/Widgets/WebView.hpp"
+#ifdef __HAIKU__
+#include "slic3r/Utils/HaikuDesktop.hpp"
+#endif
 #include "Plater.hpp"
 #include "GLCanvas3D.hpp"
 #include "EncodedFilament.hpp"
@@ -2545,6 +2548,11 @@ bool GUI_App::init_opengl()
     bool status = p_ogl_mananager->init_gl();
     m_opengl_initialized = true;
     return status;
+#elif defined(__WXHAIKU__)
+    const bool status = p_ogl_mananager->init_gl();
+    if (status)
+        WebView::OnOpenGLReady(OpenGLManager::get_gl_info().get_renderer());
+    return status;
 #else
     return p_ogl_mananager->init_gl();
 #endif
@@ -3306,6 +3314,11 @@ bool GUI_App::on_init_inner()
     // the one of the last session.
     if (app_config)
         app_config->set("dark_color_mode", wxSystemSettings::GetAppearance().IsDark() ? "1" : "0");
+#endif
+#ifdef __WXHAIKU__
+    // .3mf, .stl, .step... known to the system with Bambu Studio to open them
+    // (Tracker "Open with"), where no other application defined them.
+    Slic3r::GUI::Haiku::register_document_types();
 #endif
 // initialize label colors and fonts
     if (app_config) {
@@ -5556,7 +5569,8 @@ std::string GUI_App::handle_web_request(std::string cmd)
                 }
             }
             else if (command_str.compare("begin_network_plugin_download") == 0) {
-                CallAfter([this] { wxGetApp().ShowDownNetPluginDlg(); });
+                if (network_plugin_supported())
+                    CallAfter([this] { wxGetApp().ShowDownNetPluginDlg(); });
             }
             else if (command_str.compare("get_web_shortcut") == 0) {
                 if (root.get_child_optional("key_event") != boost::none) {
@@ -5689,7 +5703,7 @@ std::string GUI_App::handle_web_request(std::string cmd)
             }
             else if (command_str.compare("homepage_need_networkplugin") == 0) {
                 bool post_login = true;
-                if (mainframe) {
+                if (mainframe && network_plugin_supported()) {
                     if (mainframe->m_confirm_download_plugin_dlg == nullptr) {
                     mainframe->m_confirm_download_plugin_dlg = new SecondaryCheckDialog(mainframe, wxID_ANY, _L("Install network plug-in"), SecondaryCheckDialog::ButtonStyle::ONLY_CONFIRM);
                     mainframe->m_confirm_download_plugin_dlg->SetSize(wxSize(270, 158));
@@ -8760,12 +8774,12 @@ bool GUI_App::run_wizard(ConfigWizard::RunReason reason, ConfigWizard::StartPage
         pStyle = wxCAPTION | wxTAB_TRAVERSAL;
 
 #ifdef __WXHAIKU__
-    // HAIKU-TODO(zink-teardown): the guide is not destroyed when it closes but
-    // hidden with an empty page, and goes with the main window at exit:
-    // destroying a web view's engine view aborts the process in the GL kit's
-    // Zink add-on (STATUS-gui.md, ZINK-TEARDOWN.md). Its web process stays
-    // until the application quits.
-    GuideFrame &wizard = *new GuideFrame(this, pStyle);
+    // The guide's web view is destroyed with the guide, unless the GL renderer
+    // cannot take an engine view going away (WebView::CanReleaseEngine(),
+    // ZINK-TEARDOWN): then the guide is hidden with an empty page and goes with
+    // the main window at exit (its web process stays until then).
+    std::unique_ptr<GuideFrame> wizard_owner(new GuideFrame(this, pStyle));
+    GuideFrame &wizard = *wizard_owner;
 #else
     GuideFrame wizard(this, pStyle);
 #endif
@@ -8781,10 +8795,11 @@ bool GUI_App::run_wizard(ConfigWizard::RunReason reason, ConfigWizard::StartPage
     bool config_applied = false;
     bool       res = wizard.run(config_applied);
 #ifdef __WXHAIKU__
-    {
+    if (!WebView::CanReleaseEngine()) {
         wizard.Hide();
         wxString blank("about:blank");
         wizard.load_url(blank);
+        wizard_owner.release(); // a child of the main window: deleted with it
     }
 #endif
 
