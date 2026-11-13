@@ -1123,6 +1123,10 @@ void WebViewPanel::ShowNetpluginTip()
 
     int nShow = 0;
     if (!bValid) nShow = 1;
+#ifdef __HAIKU__
+    // There is no network plug-in for Haiku: no tip asking to install it.
+    nShow = 0;
+#endif
 
     BOOST_LOG_TRIVIAL(info) << boost::format("bValid=%1%, nShow=%2%")%bValid %nShow;
 

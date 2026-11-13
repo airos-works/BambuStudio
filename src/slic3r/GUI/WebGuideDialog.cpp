@@ -1133,7 +1133,14 @@ bool GuideFrame::run(bool& config_applied)
         this->SetPosition(wxPoint(guide_x, guide_y));
     }
 
-    int result = this->ShowModal();
+    int result = wxID_CANCEL;
+    if (wxWebView::IsBackendAvailable(wxWebViewBackendDefault))
+        result = this->ShowModal();
+    else
+        // Without a web view backend the pages of the guide cannot be shown and the dialog would
+        // stay blank, on a first run without a close box. Take the cancel path instead: it
+        // installs the default printer, so the application is usable.
+        BOOST_LOG_TRIVIAL(warning) << "GuideFrame: no web view backend, the setup guide is skipped";
     if (result == wxID_OK) {
         bool apply_keeped_changes = false;
         BOOST_LOG_TRIVIAL(info) << "GuideFrame returned ok";
@@ -1446,9 +1453,17 @@ int GuideFrame::SaveProfileData()
         m_Region = wxGetApp().app_config->get("region");
         m_ProfileJson["region"] = m_Region;
 
+#ifdef __HAIKU__
+        // There is no network plug-in for Haiku. The pages are told that nothing needs to be
+        // installed, so they skip the plug-in page instead of offering a download.
+        m_ProfileJson["network_plugin_install"] = "1";
+        m_ProfileJson["network_plugin_compability"] = "1";
+        network_plugin_ready = true;
+#else
         m_ProfileJson["network_plugin_install"] = wxGetApp().app_config->get("app","installed_networking");
         m_ProfileJson["network_plugin_compability"] = wxGetApp().is_compatibility_version() ? "1" : "0";
         network_plugin_ready = wxGetApp().is_compatibility_version();
+#endif
     }
     catch (std::exception &e) {
         //wxLogMessage("GUIDE: load_profile_error  %s ", e.what());
