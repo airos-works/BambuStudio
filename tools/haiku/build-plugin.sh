@@ -108,6 +108,8 @@ version=$(sed -n 's/^set(SLIC3R_VERSION "\([0-9.]*\)")/\1/p' "$BS_ROOT/version.i
 # with Developer Mode on (block_cloud = 1); prints never take the cloud path
 # either, even where someone unblocks the cloud.
 CONF_DEFAULTS="cloud_print=lan_only"
+# The unit tests check the plug-in's own defaults.
+[[ $TESTS == ON ]] && CONF_DEFAULTS=
 
 # Check projects CMake runs without the toolchain variables (mosquitto's
 # CheckIPOSupported) read them from the environment.
