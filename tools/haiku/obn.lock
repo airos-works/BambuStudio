@@ -1,0 +1,7 @@
+# The network plug-in the air/OS package ships: Open Bamboo Networking
+# (ClusterM/open-bamboo-networking, AGPL-3.0), an open-source replacement for
+# Bambu Lab's proprietary libbambu_networking with the same C ABI, from
+# airos-works/open-bamboo-networking, branch airos (its Haiku port).
+# tools/haiku/build-plugin.sh builds exactly this commit.
+repository https://github.com/airos-works/open-bamboo-networking.git
+commit e8be7dacdbf5d3e4f4c01466e15fa6c5388c2c9d
