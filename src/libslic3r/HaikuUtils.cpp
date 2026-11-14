@@ -20,6 +20,7 @@
 #include <dlfcn.h>
 #include <locale.h>
 #include <pthread.h>
+#include <wchar.h>
 
 // --- setlocale(), serialized and cheap ----------------------------------------------------
 //
@@ -111,6 +112,28 @@ extern "C" __attribute__((visibility("default"), used)) char *setlocale(int cate
     }
     pthread_mutex_unlock(&s_setlocale_lock);
     return const_cast<char *>(result);
+}
+
+// --- mbstowcs(), wcstombs(): thread safe ----------------------------------------------------
+//
+// libroot's mbstowcs() and wcstombs() keep their conversion state in one static mbstate_t
+// (posix/wchar/mbstowcs.c, wcstombs.c), and with the ICU locale backend that state holds the
+// ICU converter: two threads converting at once share one converter and crash in
+// ucnv_getNextUChar(). wxWidgets converts every char string through mbstowcs() (wxConvLibc),
+// on the main thread and on workers alike: the camera thread of the Device tab
+// (MediaPlayCtrl::media_proc(), building a wxURI) crashed so while the main thread was busy.
+// POSIX does not allow these two to share state between threads. These definitions, found
+// before libroot's like setlocale() above, give each thread its own state.
+extern "C" __attribute__((visibility("default"), used)) size_t mbstowcs(wchar_t *dest, const char *source, size_t length)
+{
+    static thread_local mbstate_t t_state;
+    return mbsrtowcs(dest, &source, length, &t_state);
+}
+
+extern "C" __attribute__((visibility("default"), used)) size_t wcstombs(char *dest, const wchar_t *source, size_t length)
+{
+    static thread_local mbstate_t t_state;
+    return wcsrtombs(dest, &source, length, &t_state);
 }
 
 namespace Slic3r {
