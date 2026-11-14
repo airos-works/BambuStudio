@@ -4,4 +4,4 @@
 # airos-works/open-bamboo-networking, branch airos (its Haiku port).
 # tools/haiku/build-plugin.sh builds exactly this commit.
 repository https://github.com/airos-works/open-bamboo-networking.git
-commit e8be7dacdbf5d3e4f4c01466e15fa6c5388c2c9d
+commit f45d57b9a45691dc6f624d40789087beab1d9a69
