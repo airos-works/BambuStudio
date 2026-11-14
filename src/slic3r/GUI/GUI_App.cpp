@@ -1705,6 +1705,11 @@ static std::string decode(std::string const& extra, std::string const& path = {}
 
 int GUI_App::download_plugin(std::string name, std::string package_name, InstallProgressFn pro_fn, WasCancelledFn cancel_fn)
 {
+#ifdef __HAIKU__
+    // Bambu's plug-ins have no Haiku build; the package ships its network plug-in.
+    BOOST_LOG_TRIVIAL(info) << "download_plugin " << name << ": not on Haiku";
+    return -1;
+#endif
     int result = 0;
     json j;
     std::string err_msg;
@@ -1895,6 +1900,10 @@ int GUI_App::download_plugin(std::string name, std::string package_name, Install
 
 int GUI_App::install_plugin(std::string name, std::string package_name, InstallProgressFn pro_fn, WasCancelledFn cancel_fn)
 {
+#ifdef __HAIKU__
+    BOOST_LOG_TRIVIAL(info) << "install_plugin " << name << ": not on Haiku";
+    return -1;
+#endif
     bool cancel = false;
     std::string target_file_path = (fs::temp_directory_path() / package_name).string();
 
@@ -2107,6 +2116,10 @@ void GUI_App::remove_old_networking_plugins()
 
 int GUI_App::updating_bambu_networking()
 {
+#ifdef __HAIKU__
+    // Bambu's plug-in has no Haiku build: the package's own is not "updated" with it.
+    return -1;
+#endif
     DownloadProgressDialog dlg(_L("Downloading Bambu Network Plug-in"));
     dlg.ShowModal();
     return 0;
@@ -2128,6 +2141,15 @@ bool GUI_App::check_networking_version()
 
     m_networking_compatible = false;
     return false;
+}
+
+bool GUI_App::network_plugin_supported()
+{
+#ifdef __HAIKU__
+    return wxTheApp && wxGetApp().getAgent() != nullptr;
+#else
+    return true;
+#endif
 }
 
 bool GUI_App::is_compatibility_version()
@@ -3871,6 +3893,11 @@ void GUI_App::open_new_official_filament_hint(const std::string& ams_id, const s
 
 void GUI_App::copy_network_if_available()
 {
+#ifdef __HAIKU__
+    // The network plug-in is the package's (NetworkAgent::initialize_network_module()); nothing is
+    // downloaded into the settings folder to be copied from there.
+    return;
+#endif
     if (app_config->get("update_network_plugin") != "true")
         return;
     std::string data_dir_str = data_dir();
@@ -4618,7 +4645,7 @@ void GUI_App::ShowUserGuide() {
 void GUI_App::ShowDownNetPluginDlg(bool post_login)
 {
 #ifdef __HAIKU__
-    // There is no network plug-in for Haiku: nothing to download.
+    // Bambu's network plug-in has no Haiku build; the package ships an open-source one.
     (void) post_login;
     BOOST_LOG_TRIVIAL(info) << "network plug-in download requested: not available on Haiku";
     return;
@@ -5569,7 +5596,7 @@ std::string GUI_App::handle_web_request(std::string cmd)
                 }
             }
             else if (command_str.compare("begin_network_plugin_download") == 0) {
-                if (network_plugin_supported())
+                if (bambu_cloud_supported())
                     CallAfter([this] { wxGetApp().ShowDownNetPluginDlg(); });
             }
             else if (command_str.compare("get_web_shortcut") == 0) {
@@ -5703,7 +5730,7 @@ std::string GUI_App::handle_web_request(std::string cmd)
             }
             else if (command_str.compare("homepage_need_networkplugin") == 0) {
                 bool post_login = true;
-                if (mainframe && network_plugin_supported()) {
+                if (mainframe && bambu_cloud_supported()) {
                     if (mainframe->m_confirm_download_plugin_dlg == nullptr) {
                     mainframe->m_confirm_download_plugin_dlg = new SecondaryCheckDialog(mainframe, wxID_ANY, _L("Install network plug-in"), SecondaryCheckDialog::ButtonStyle::ONLY_CONFIRM);
                     mainframe->m_confirm_download_plugin_dlg->SetSize(wxSize(270, 158));

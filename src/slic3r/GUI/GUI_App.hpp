@@ -881,10 +881,17 @@ public:
     std::string     get_http_url(std::string country_code, std::string path = {});
     std::string     get_model_http_url(std::string country_code);
     bool            is_compatibility_version();
-    // Whether Bambu's network plug-in exists for this platform at all (not
-    // whether it is installed): where it does not (Haiku), what needs it
-    // (account, cloud, user experience program) is not offered.
-    static constexpr bool network_plugin_supported()
+    // Whether the network plug-in can be used. Bambu's is downloaded on the
+    // other systems; there is no build of it for Haiku, whose package ships
+    // the open-source Open Bamboo Networking instead: there it is whether that
+    // one loaded. Without it, the printers (Device tab, printing, sending)
+    // are not offered.
+    static bool network_plugin_supported();
+    // Whether Bambu's cloud services are offered: the account (login,
+    // MakerWorld, cloud sync), the user experience program, and downloading
+    // Bambu's plug-in. Not on Haiku: its plug-in is set up for printers on
+    // the local network (LAN-only mode, its default block_cloud = 1).
+    static constexpr bool bambu_cloud_supported()
     {
 #ifdef __HAIKU__
         return false;

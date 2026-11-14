@@ -1215,6 +1215,11 @@ bool PresetUpdater::priv::get_cached_plugins_version(std::string& cached_version
 void PresetUpdater::priv::sync_plugins(std::string http_url, std::string plugin_version, bool is_arm64)
 {
     if (cancel) return;
+#ifdef __HAIKU__
+    // Bambu's plug-ins have no Haiku build: the package ships its own network plug-in, which
+    // is updated with the package.
+    return;
+#endif
 
     if (plugin_version == "00.00.00.00") {
         BOOST_LOG_TRIVIAL(info) << "non need to sync plugins for there is no plugins currently.";

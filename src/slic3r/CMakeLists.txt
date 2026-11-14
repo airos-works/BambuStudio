@@ -850,6 +850,10 @@ endif ()
 
 if (TARGET device_page_build)
     add_dependencies(libslic3r_gui device_page_build)
+else ()
+    # No device page bundle (SLIC3R_DEVICE_PAGE=OFF, the default on Haiku): the
+    # AMS panel of the Device tab is the wx one, not the bundle's web page.
+    target_compile_definitions(libslic3r_gui PUBLIC BBL_ENABLE_AMS_CONTROL_WEB=0)
 endif()
 
 if (TARGET device_page_html_build)

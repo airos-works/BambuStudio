@@ -13,6 +13,9 @@
 #include "slic3r/Utils/FileTransferUtils.hpp"
 #include "slic3r/Utils/CertificateVerify.hpp"
 #include "libslic3r/Log.hpp"
+#ifdef __HAIKU__
+#include "libslic3r/HaikuUtils.hpp"
+#endif
 
 using namespace BBL;
 
@@ -26,6 +29,26 @@ static HMODULE source_module = NULL;
 #else
 static void* networking_module = NULL;
 static void* source_module = NULL;
+#endif
+
+#ifdef __HAIKU__
+// Bambu's network plug-in has no Haiku build. The package ships the open-source
+// Open Bamboo Networking (same C ABI) in "plugins" beside the executable
+// (apps/BambuStudio/plugins). A library of the same name in the user's
+// <data_dir>/plugins comes first: someone's own build. Nothing is downloaded.
+static std::string haiku_plugin_folder;
+
+static std::string haiku_plugin_library(const boost::filesystem::path &user_folder, const std::string &file)
+{
+    boost::system::error_code ec;
+    boost::filesystem::path   user = user_folder / file;
+    if (boost::filesystem::is_regular_file(user, ec))
+        return user.string();
+    const std::string exe = Haiku::executable_path();
+    if (exe.empty())
+        return user.string();
+    return (boost::filesystem::path(exe).parent_path() / "plugins" / file).string();
+}
 #endif
 
 
@@ -266,6 +289,10 @@ int NetworkAgent::initialize_network_module(bool using_backup, bool validate_cer
 #else
     #if defined(__WXMAC__)
     library = plugin_folder.string() + "/" + std::string("lib") + std::string(BAMBU_NETWORK_LIBRARY) + ".dylib";
+    #elif defined(__HAIKU__)
+    library = haiku_plugin_library(plugin_folder, std::string("lib") + BAMBU_NETWORK_LIBRARY + ".so");
+    haiku_plugin_folder = boost::filesystem::path(library).parent_path().string();
+    BOOST_LOG_TRIVIAL(info) << "network plug-in: " << library;
     #else
     library = plugin_folder.string() + "/" + std::string("lib") + std::string(BAMBU_NETWORK_LIBRARY) + ".so";
     #endif
@@ -622,6 +649,9 @@ void* NetworkAgent::get_bambu_source_entry()
 #else
 #if defined(__WXMAC__)
     library = plugin_folder.string() + "/" + std::string("lib") + std::string(BAMBU_SOURCE_LIBRARY) + ".dylib";
+#elif defined(__HAIKU__)
+    // beside the network plug-in that was loaded
+    library = haiku_plugin_folder + "/" + std::string("lib") + std::string(BAMBU_SOURCE_LIBRARY) + ".so";
 #else
     library = plugin_folder.string() + "/" + std::string("lib") + std::string(BAMBU_SOURCE_LIBRARY) + ".so";
 #endif

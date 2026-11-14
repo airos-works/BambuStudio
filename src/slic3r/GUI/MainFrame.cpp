@@ -1418,10 +1418,10 @@ void MainFrame::init_tabpanel()
                 BOOST_LOG_TRIVIAL(info) << boost::format("skipped tab switch from %1% to %2%, lack of network plugins") %
                     old_sel % new_sel;
 #ifdef __HAIKU__
-                // There is no network plug-in for Haiku: say so instead of offering to install it.
+                // Bambu's plug-in cannot be installed on Haiku: the package's own did not load.
                 CallAfter([this] {
                     MessageDialog(this,
-                        _L("The device page of Bambu Lab printers needs the Bambu network plug-in, which is not available for this system.") + "\n" +
+                        _L("The device page of Bambu Lab printers needs the network plug-in, which could not be loaded.") + "\n" +
                         _L("Sliced plates can be exported to a file and printed from an SD card or sent by other means."),
                         _L("Device"), wxOK | wxICON_INFORMATION).ShowModal();
                 });
@@ -2121,22 +2121,17 @@ wxBoxSizer* MainFrame::create_side_tools()
     /*slice*/
     m_slice_select = eSlicePlate;
     m_print_select = ePrintPlate;
-#ifdef __HAIKU__
-    // Printing and sending go through the network plug-in, which does not exist for Haiku: the
-    // button of Bambu Lab printers exports the sliced file there.
-    m_print_select = eExportSlicedFile;
-#endif
+    // Printing and sending go through the network plug-in: without it (Haiku, where the
+    // package's plug-in did not load) the button of Bambu Lab printers exports the sliced file.
+    if (!GUI_App::network_plugin_supported())
+        m_print_select = eExportSlicedFile;
 
     auto slice_panel = new wxPanel(this,wxID_ANY,wxDefaultPosition,wxDefaultSize,wxTRANSPARENT_WINDOW);
     auto print_panel = new wxPanel(this,wxID_ANY,wxDefaultPosition,wxDefaultSize,wxTRANSPARENT_WINDOW);
 
     m_slice_btn = new SideButton(slice_panel, _L("Slice plate"), "");
     m_slice_option_btn = new SideButton(slice_panel, "", "sidebutton_dropdown", 0, FromDIP(14));
-#ifdef __HAIKU__
-    m_print_btn = new SideButton(print_panel, _L("Export plate sliced file"), "");
-#else
-    m_print_btn = new SideButton(print_panel, _L("Print plate"), "");
-#endif
+    m_print_btn = new SideButton(print_panel, GUI_App::network_plugin_supported() ? _L("Print plate") : _L("Export plate sliced file"), "");
     m_print_option_btn = new SideButton(print_panel, "", "sidebutton_dropdown", 0, FromDIP(14));
 
     auto slice_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -2492,18 +2487,18 @@ wxBoxSizer* MainFrame::create_side_tools()
                     p->Dismiss();
                     });
 
-#ifdef __HAIKU__
-                // no network plug-in: nothing to print or send with
-                print_plate_btn->Hide();
-                print_all_btn->Hide();
-                send_to_printer_btn->Hide();
-                send_to_printer_all_btn->Hide();
-#else
-                p->append_button(print_plate_btn);
-                p->append_button(print_all_btn);
-                p->append_button(send_to_printer_btn);
-                p->append_button(send_to_printer_all_btn);
-#endif
+                if (GUI_App::network_plugin_supported()) {
+                    p->append_button(print_plate_btn);
+                    p->append_button(print_all_btn);
+                    p->append_button(send_to_printer_btn);
+                    p->append_button(send_to_printer_all_btn);
+                } else {
+                    // no network plug-in (Haiku): nothing to print or send with
+                    print_plate_btn->Hide();
+                    print_all_btn->Hide();
+                    send_to_printer_btn->Hide();
+                    send_to_printer_all_btn->Hide();
+                }
                 p->append_button(export_sliced_file_btn);
                 p->append_button(export_all_sliced_file_btn);
 
@@ -4525,15 +4520,17 @@ void MainFrame::on_config_changed(DynamicPrintConfig* config) const
 
 void MainFrame::set_print_button_to_default(PrintSelectType select_type)
 {
-    if (select_type == PrintSelectType::ePrintPlate) {
-#ifdef __HAIKU__
-        // no network plug-in to print with: export the sliced file
+    if (select_type == PrintSelectType::ePrintPlate && !GUI_App::network_plugin_supported()) {
+        // no network plug-in to print with (Haiku): export the sliced file
         m_print_btn->SetLabel(_L("Export plate sliced file"));
         m_print_select = eExportSlicedFile;
-#else
+        if (m_print_enable)
+            m_print_enable = get_enable_print_status();
+        m_print_btn->Enable(m_print_enable);
+        this->Layout();
+    } else if (select_type == PrintSelectType::ePrintPlate) {
         m_print_btn->SetLabel(_L("Print plate"));
         m_print_select = ePrintPlate;
-#endif
         if (m_print_enable)
             m_print_enable = get_enable_print_status();
         m_print_btn->Enable(m_print_enable);

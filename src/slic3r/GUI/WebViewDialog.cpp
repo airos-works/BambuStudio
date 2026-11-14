@@ -1898,8 +1898,8 @@ void WebViewPanel::OnDocumentLoaded(wxWebViewEvent& evt)
         if (wxGetApp().get_mode() == comDevelop) wxLogMessage("%s", "Document loaded; url='" + evt.GetURL() + "'");
     } else if (m_browserLeft != nullptr && evt.GetId() == m_browserLeft->GetId()) {
         m_leftfirst = true;
-        // No account without the network plug-in: no "Login/Register".
-        if (!GUI_App::network_plugin_supported())
+        // No account where Bambu's cloud is not offered: no "Login/Register".
+        if (!GUI_App::bambu_cloud_supported())
             WebView::RunScript(m_browserLeft, "$('#LoginArea').hide();");
     }
 
