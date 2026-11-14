@@ -1,5 +1,5 @@
 name			bambustudio
-version			2.9.1.70~airos1-5
+version			2.9.1.70~airos1-6
 architecture	x86_64
 summary			"Slicer for Bambu Lab and other FDM 3D printers"
 description		"Bambu Studio prepares 3D models for printing: it arranges and \
@@ -9,13 +9,17 @@ Bambu Lab printers and G-code for many others. The air/OS build is native: \
 the wxWidgets user interface draws through the Be API (BWindow, BView, \
 BBitmap, BFont), the 3D view is a BGLView, web pages are shown by the Summit \
 engine, and files, fonts, drives, the clipboard and notifications come from \
-the system's kits."
+the system's kits. Printing to Bambu Lab printers on the local network (in \
+LAN-only mode with Developer Mode on) goes through Open Bamboo Networking by \
+Alexey Cluster (github.com/ClusterM/open-bamboo-networking), the open-source \
+replacement for Bambu's network plug-in, which the package includes."
 packager		"air/OS <https://github.com/airos-works>"
 vendor			"airos-works"
 copyrights {
 	"2022-2026 Bambu Lab"
 	"2016-2022 Prusa Research and the PrusaSlicer contributors"
 	"2011-2018 Alessandro Ranellucci and the Slic3r contributors"
+	"2026 Alexey Cluster and the Open Bamboo Networking contributors"
 	"2026 air/OS contributors"
 }
 licenses {
@@ -26,6 +30,7 @@ urls {
 }
 source-urls {
 	"https://github.com/airos-works/BambuStudio"
+	"https://github.com/airos-works/open-bamboo-networking"
 }
 provides {
 	bambustudio = 2.9.1.70~airos1

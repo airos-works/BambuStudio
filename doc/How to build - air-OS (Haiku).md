@@ -15,13 +15,22 @@ Qt, X11, Wayland, Cairo, Pango, GStreamer, DBus, fontconfig or WebKitGTK.
 | xdg-open, .desktop files | BRoster; MIME types shipped in the package (`src/platform/haiku/mime_db`) |
 | OpenCV | `src/minicv`: the few functions the tree uses |
 | GLFW, OpenVDB, OpenMeshCraft | not used (MCUT for booleans; OpenVDB served SLA hollowing only) |
-| Node.js device page bundle | not built (`SLIC3R_DEVICE_PAGE=OFF`): it needs Bambu's network plug-in |
+| Bambu's network plug-in (closed source, downloaded at first start) | [Open Bamboo Networking](https://github.com/ClusterM/open-bamboo-networking) by Alexey Cluster (AGPL-3.0, same C ABI), built from source and shipped in the package: `apps/BambuStudio/plugins` (fork airos-works/open-bamboo-networking, pinned in `tools/haiku/obn.lock`) |
+| GStreamer camera pipeline | none: the camera view decodes with the system's FFmpeg (`wxMediaCtrl3`, as upstream on Linux) |
+| Node.js device page bundle | not built (`SLIC3R_DEVICE_PAGE=OFF`, no Node.js at build time): the Device tab's AMS panel is the wx one (`BBL_ENABLE_AMS_CONTROL_WEB=0`) |
 
-Bambu's proprietary network plug-in has no Haiku build. Cloud login, cloud
-sync, the device pages and sending to printers are therefore hidden or
-inactive (`GUI_App::network_plugin_supported()`); preparing, slicing,
-previewing and exporting `.gcode.3mf`/G-code work fully offline, and preset
-updates still come from Bambu's servers.
+Bambu's proprietary network plug-in has no Haiku build; the package ships
+Open Bamboo Networking instead, an open-source drop-in replacement set up
+for printers on the local network (LAN-only mode with Developer Mode on,
+see [Printing to a Bambu Lab printer](#printing-to-a-bambu-lab-printer)).
+With it the Device tab, connecting a printer by IP address and access code,
+printing and sending work as upstream. Bambu's cloud (account login,
+MakerWorld, cloud sync, the user experience program) is not offered
+(`GUI_App::bambu_cloud_supported()`), and nothing is ever downloaded in
+place of the packaged plug-in. Should the plug-in not load, the application
+falls back to the offline behaviour (`GUI_App::network_plugin_supported()`):
+preparing, slicing, previewing and exporting `.gcode.3mf`/G-code work fully
+offline either way, and preset updates still come from Bambu's servers.
 
 ## Building (cross, on Linux)
 
@@ -36,7 +45,16 @@ tools/haiku/build-deps.sh x86_64      # static Boost, TBB, OCCT (26 toolkits), C
 tools/haiku/build-wx.sh x86_64        # the pinned wxWidgets -> BS_SCRATCH/wx-pinned/x86_64
 WX_PREFIX=$BS_SCRATCH/wx-pinned/x86_64 tools/haiku/build.sh x86_64 --gui
 tools/haiku/build.sh x86_64           # without --gui: the headless slicer bambu-studio-cli
+tools/haiku/build-plugin.sh x86_64    # the network plug-in -> BS_SCRATCH/obn-install/x86_64/plugins
 ```
+
+`build-plugin.sh` builds the commit of `tools/haiku/obn.lock` (or a checkout
+named by `OBN_SRC`) against the system's OpenSSL, libcurl and zlib; mosquitto
+(client library only) and cJSON come from pinned release archives and are
+compiled into the plug-in, uthash is header-only. It reports Bambu Studio's
+own version (`version.inc`), which the application's compatibility check
+wants. `--tests` builds its unit tests instead; `tools/haiku/test/run-plugin-tests.sh`
+runs them in an air/OS VM.
 
 Replace `x86_64` with `arm64` for ARM boards (one binary for every board:
 `-march=armv8-a -mtune=cortex-a72`). System libraries air/OS ships (zlib,
@@ -54,9 +72,57 @@ pictures scaled down) and the MIME types with `tools/haiku/stage-mime-db.sh`.
 ## Installed layout
 
 - `apps/BambuStudio/BambuStudio` (Deskbar: Applications > Bambu Studio)
+- `apps/BambuStudio/plugins/libbambu_networking.so`, `libBambuSource.so`: the
+  network plug-in (about 1.9 MB on x86_64), loaded at start-up; a library of
+  the same name in `~/config/settings/BambuStudio/plugins` takes precedence
+  (someone's own build)
+- `documentation/packages/bambustudio/open-bamboo-networking`: its README and licence
 - `data/BambuStudio/resources`
 - `data/mime_db/model/{3mf,stl,step,obj}`, `text/x-gcode`, `application/x-amf`
-- settings and logs: `~/config/settings/BambuStudio`
+- settings and logs: `~/config/settings/BambuStudio` (the plug-in's settings:
+  `obn.conf` there, written at its first start)
+
+## Printing to a Bambu Lab printer
+
+Over the local network, with the printer in **LAN-only mode with Developer
+Mode** on (Open Bamboo Networking's "Option A"; nothing goes through Bambu's
+cloud). On the printer (P1S: the nut icon, then **WLAN**; other models:
+Settings > LAN Only Mode):
+
+1. switch on **LAN Only**, then **Developer Mode** (firmware that has it:
+   P1S 01.08 and later). Without Developer Mode, current firmware rejects
+   every print command that is not signed with Bambu's keys ("MQTT Command
+   verification failed");
+2. note the printer's **IP address** and the 8-character **access code**
+   shown on the same page.
+
+In Bambu Studio:
+
+1. select the printer's preset (e.g. *Bambu Lab P1S 0.4 nozzle*);
+2. **Device** tab: the printer appears in the printer list when it is on the
+   same network (SSDP); pick it and enter the access code. Otherwise use
+   *Connect via LAN* / *Can't find my devices?* and enter IP address and
+   access code. Status (temperatures, AMS, progress) and the camera follow;
+3. slice, then **Print plate**: choose the printer and send. The `.gcode.3mf`
+   goes to the printer's SD card over FTPS (port 990) and the print starts by
+   MQTT (port 8883).
+
+The plug-in keeps its settings in `~/config/settings/BambuStudio/obn.conf`
+(commented; written at the first start with the package's defaults:
+`block_cloud = 1`, `cloud_print = lan_only`). The printer's TLS certificate
+is checked against Bambu's CA (`resources/cert/printer.cer`) and its serial
+number. A printer reached through NAT or a VPN works by IP address
+(`override_lan_ip = 1` for the camera and the file browser); SSDP discovery
+needs the same broadcast domain.
+
+Nothing of this runs while the Device tab is not used, apart from a UDP
+listener for the printers' announcements (port 2021); a connected printer
+holds one MQTT connection.
+
+Cloud printing (a printer bound to a Bambu account, without Developer Mode)
+needs Bambu's private signing credentials, which the plug-in does not
+include; see the plug-in's README in
+`/boot/system/documentation/packages/bambustudio/open-bamboo-networking`.
 
 ## Tested
 
@@ -69,11 +135,23 @@ pictures scaled down) and the MIME types with `tools/haiku/stage-mime-db.sh`.
   570 MB on the Pi; the main window takes 1.4 s to create.
 - `tools/haiku/vm/slice-test.sh <arch>`: headless slicing in QEMU (STL, 3MF,
   OBJ, STEP; 1, 2 and 4 threads give identical G-code).
+- Printing, without a printer: `tools/haiku/test/mock-printer.py` plays a
+  P1S on the host (SSDP announcements, the TCP 3000 "detect", MQTT over TLS
+  with `bblp`/access code, implicit FTPS, the port 6000 camera), and
+  `tools/haiku/test/run-mock-vm.sh` boots the x86_64 test VM with the mock
+  reachable as 10.0.2.100. In air/OS hrev60207+2650 (2026-11-14): the printer
+  is discovered, connected with its access code and by IP address + access
+  code, the Device tab shows its status, AMS and live camera, a sliced plate
+  is sent (the `.gcode.3mf` arrives over FTPS, its G-code MD5 checks, the
+  MQTT `project_file` names it) and the print's progress follows
+  (`tools/haiku/test/check-mock-print.py`). The plug-in's own unit tests
+  pass in the VM (`tools/haiku/test/run-plugin-tests.sh`, 30 of 30).
+  Not tested with a real printer.
 
 ## Known limits
 
-- No network plug-in: no cloud, device monitoring, camera or printing over
-  the network (a native LAN-mode sender would be a separate project).
+- Printing and the Device tab: local network only (LAN-only mode with
+  Developer Mode), see above; no Bambu account, cloud printing or MakerWorld.
 - The software renderer "Software Pipe" (llvmpipe from HaikuPorts' Mesa 22)
   crashes on BambuStudio's first frame; machines without a GPU driver use
   the Zink add-on's softpipe fallback, which works but is slow.
