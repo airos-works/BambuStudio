@@ -27,6 +27,11 @@
 #include <boost/uuid/uuid_io.hpp>
 #include "libslic3r/Log.hpp"
 
+#ifndef WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 #ifdef WIN32
 //FIXME replace the two following includes with <boost/md5.hpp> after it becomes mainstream.
 #include <boost/uuid/detail/md5.hpp>
@@ -611,6 +616,19 @@ static bool verify_config_file_checksum(boost::nowide::ifstream &ifs)
 
 
 
+#ifndef WIN32
+// Waits until what was written to the file (or the directory entries) is on the disk.
+static void sync_to_disk(const std::string &path)
+{
+    int fd = ::open(path.c_str(), O_RDONLY);
+    if (fd < 0)
+        return;
+    if (::fsync(fd) != 0)
+        BOOST_LOG_TRIVIAL(warning) << "fsync failed for " << PathSanitizer::sanitize(path);
+    ::close(fd);
+}
+#endif
+
 #ifdef USE_JSON_CONFIG
 std::string AppConfig::load()
 {
@@ -992,7 +1010,16 @@ void AppConfig::save()
     // Rename the config atomically.
     // On Windows, the rename is likely NOT atomic, thus it may fail if PrusaSlicer crashes on another thread in the meanwhile.
     // To cope with that, we already made a backup of the config on Windows.
+#ifndef WIN32
+    // The new contents reach the disk before the rename. Otherwise a crash or a
+    // power loss soon after it can leave the configuration file with its new
+    // size but blocks that were never written, which it cannot be read with.
+    sync_to_disk(path_pid);
+#endif
     rename_file(path_pid, path);
+#ifndef WIN32
+    sync_to_disk(boost::filesystem::path(path).parent_path().string());
+#endif
     m_dirty = false;
 }
 
