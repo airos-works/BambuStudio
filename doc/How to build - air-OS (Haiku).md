@@ -133,6 +133,11 @@ include; see the plug-in's README in
   the same workflow; a 3DBenchy slices to the same G-code statistics as on
   x86_64 (about 28 s on the Pi 4). BambuStudio with a model loaded uses about
   570 MB on the Pi; the main window takes 1.4 s to create.
+- x86_64: Framework Desktop (Ryzen AI Max+ 395, Radeon 8060S), air/OS
+  hrev60207+2955 (2026-11-25), 2.9.2.62: starts with a `BambuStudio.conf`
+  a hang had left with a block of garbage (set aside as
+  `BambuStudio.conf.unreadable`, defaults and the setup wizard; earlier
+  builds crashed at start), 3D view.
 - `tools/haiku/vm/slice-test.sh <arch>`: headless slicing in QEMU (STL, 3MF,
   OBJ, STEP; 1, 2 and 4 threads give identical G-code).
 - Printing, without a printer: `tools/haiku/test/mock-printer.py` plays a
