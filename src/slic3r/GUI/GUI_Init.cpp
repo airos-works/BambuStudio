@@ -13,6 +13,10 @@
 
 // To show a message box if GUI initialization ends up with an exception thrown.
 #include <wx/msgdlg.h>
+#ifdef __HAIKU__
+#include <wx/module.h>
+#include "slic3r/Utils/HaikuDesktop.hpp"
+#endif
 
 #include "libslic3r/Log.hpp"
 #include <boost/nowide/iostream.hpp>
@@ -24,6 +28,20 @@
 
 namespace Slic3r {
 namespace GUI {
+
+// The exception may come before wxWidgets is initialised (the GUI_App
+// constructor reads the configuration). wxMessageBox() cannot be used then on
+// Haiku: wxUniversal has no theme yet and crashes creating the dialog.
+static void show_init_error(const wxString &message, const wxString &title)
+{
+#ifdef __HAIKU__
+    if (!wxModule::AreInitialized()) {
+        Haiku::show_startup_error(into_u8(title), into_u8(message));
+        return;
+    }
+#endif
+    wxMessageBox(message, title, wxICON_STOP);
+}
 
 int GUI_Run(GUI_InitParams &params)
 {
@@ -79,13 +97,13 @@ int GUI_Run(GUI_InitParams &params)
         if (is_log_trivial_valid()) {
             BOOST_LOG_TRIVIAL(error) << ex.what() << std::endl; // boost log not initialized yet 
         }
-        wxMessageBox(boost::nowide::widen(ex.what()), _L("Bambu Studio GUI initialization failed"), wxICON_STOP);
+        show_init_error(boost::nowide::widen(ex.what()), _L("Bambu Studio GUI initialization failed"));
 
     } catch (const std::exception &ex) {
         if (is_log_trivial_valid()) {
             BOOST_LOG_TRIVIAL(error) << ex.what() << std::endl; // boost log not initialized yet 
         }
-        wxMessageBox(format_wxstr(_L("Fatal error, exception caught: %1%"), ex.what()), _L("Bambu Studio GUI initialization failed"), wxICON_STOP);
+        show_init_error(format_wxstr(_L("Fatal error, exception caught: %1%"), ex.what()), _L("Bambu Studio GUI initialization failed"));
     }
     // error
     return 1;

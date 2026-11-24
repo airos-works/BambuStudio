@@ -57,6 +57,13 @@ void type_saved_file(const std::string &path);
 // signature.
 void register_document_types(const char *app_signature = nullptr);
 
+// Tells the user why the application could not start, in an alert (B_STOP_ALERT),
+// and returns when it is closed. For errors before wxWidgets is initialised,
+// where wxMessageBox cannot be used (wxUniversal has no theme yet): connects to
+// the app_server for the alert when nothing in this team did. Prints the message
+// to stderr as well.
+void show_startup_error(const std::string &title, const std::string &text);
+
 } // namespace Haiku
 } // namespace GUI
 } // namespace Slic3r

@@ -2,10 +2,15 @@
 
 #include "HaikuDesktop.hpp"
 
+#include <cstdio>
 #include <cstring>
 #include <sys/utsname.h>
 
+#include <Alert.h>
+#include <AppFileInfo.h>
+#include <Application.h>
 #include <Entry.h>
+#include <File.h>
 #include <InterfaceDefs.h>
 #include <Message.h>
 #include <Messenger.h>
@@ -287,6 +292,43 @@ void register_document_types(const char *app_signature)
         if (mime.GetPreferredApp(text) != B_OK || text[0] == '\0')
             mime.SetPreferredApp(app_signature);
     }
+}
+
+void show_startup_error(const std::string &title, const std::string &text)
+{
+    fprintf(stderr, "%s: %s\n", title.c_str(), text.c_str());
+    fflush(stderr);
+
+    BApplication *app = nullptr;
+    if (be_app == nullptr) {
+        // The executable's own signature, so that the alert is the application's.
+        char signature[B_MIME_TYPE_LENGTH] = "application/x-vnd.airos-BambuStudio";
+        image_info info;
+        int32 cookie = 0;
+        while (get_next_image_info(B_CURRENT_TEAM, &cookie, &info) == B_OK) {
+            if (info.type != B_APP_IMAGE)
+                continue;
+            BFile file(info.name, B_READ_ONLY);
+            BAppFileInfo app_info(&file);
+            char own[B_MIME_TYPE_LENGTH];
+            if (app_info.InitCheck() == B_OK && app_info.GetSignature(own) == B_OK)
+                strlcpy(signature, own, sizeof(signature));
+            break;
+        }
+        status_t error = B_OK;
+        app = new BApplication(signature, &error);
+        if (error != B_OK) {
+            delete app;
+            return;
+        }
+    }
+
+    BAlert *alert = new BAlert(title.c_str(), text.c_str(), "OK", nullptr, nullptr,
+                               B_WIDTH_AS_USUAL, B_STOP_ALERT);
+    alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+    alert->Go();
+
+    delete app;
 }
 
 } // namespace Haiku
