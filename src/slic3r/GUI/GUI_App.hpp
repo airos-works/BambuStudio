@@ -305,6 +305,10 @@ private:
     // for the startup G-code viewer, whose update_layout() bed must stay 200x200.
     void            finish_suspended_plater_config(bool apply_full_config);
     bool            m_app_conf_exists{ false };
+#ifdef __HAIKU__
+    // The configuration file that could not be read and was renamed, to tell the user at start.
+    std::string     m_app_config_set_aside;
+#endif
     EAppMode        m_app_mode{ EAppMode::Editor };
     bool            m_is_recreating_gui{ false };
 #if defined(__WXOSX__)

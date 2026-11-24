@@ -1594,6 +1594,17 @@ void GUI_App::post_init()
         //this->check_updates(false);
         //BOOST_LOG_TRIVIAL(info) << "after check_updates";
         CallAfter([this] {
+#ifdef __HAIKU__
+            if (!m_app_config_set_aside.empty()) {
+                MessageDialog dlg(mainframe,
+                    format_wxstr(_L("The settings file could not be read, it was probably damaged when the computer stopped unexpectedly. "
+                                    "Bambu Studio starts with the default settings; the damaged file was kept as\n\n%1%"),
+                                 m_app_config_set_aside),
+                    _L("Settings reset"), wxOK | wxICON_WARNING);
+                dlg.ShowModal();
+                m_app_config_set_aside.clear();
+            }
+#endif
             bool cw_showed = this->config_wizard_startup();
 
             std::string http_url = get_http_url(app_config->get_country_code());
@@ -2928,6 +2939,28 @@ void GUI_App::init_app_config()
 	m_app_conf_exists = app_config->exists();
 	if (m_app_conf_exists) {
         std::string error = app_config->load();
+#ifdef __HAIKU__
+        if (!error.empty()) {
+            // A file that cannot be read (a crash or a power loss right after it was
+            // written can leave blocks of garbage in it) is renamed and the application
+            // starts with the default settings, as at a first start. The error below
+            // would stop every start until the user found and deleted the file.
+            const std::string path       = app_config->config_path();
+            const std::string unreadable = path + ".unreadable";
+            boost::system::error_code ec;
+            boost::filesystem::rename(path, unreadable, ec);
+            if (!ec) {
+                BOOST_LOG_TRIVIAL(error) << "Configuration file " << PathSanitizer::sanitize(path)
+                                         << " cannot be read (" << error << "), renamed to " << PathSanitizer::sanitize(unreadable)
+                                         << "; starting with the default settings";
+                delete app_config;
+                app_config              = new AppConfig();
+                m_app_config_set_aside  = unreadable;
+                m_app_conf_exists       = false;
+                return;
+            }
+        }
+#endif
         if (!error.empty()) {
             // Error while parsing config file. We'll customize the error message and rethrow to be displayed.
             BOOST_LOG_TRIVIAL(error)
