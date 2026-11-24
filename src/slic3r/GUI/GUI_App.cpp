@@ -1,5 +1,6 @@
 #include "libslic3r/Technologies.hpp"
 #include "GUI_App.hpp"
+#include "WebViewSecurity.hpp"
 #include "BindDialog.hpp"
 #include "GUI_Init.hpp"
 #include "GUI_ObjectList.hpp"
@@ -10,6 +11,7 @@
 #include "slic3r/GUI/TaskManager.hpp"
 #include "slic3r/GUI/OpenGLManager.hpp"
 #include "libslic3r/PerfTrace.hpp"
+#include "libslic3r/BuildInfo.hpp"
 #include "format.hpp"
 #include <wx/language.h>
 #include <wx/string.h>
@@ -844,7 +846,17 @@ static const FileWildcards file_wildcards_by_type[FT_SIZE] = {
     /* FT_OBJ */     { "OBJ files"sv,       { ".obj"sv } },
     /* FT_AMF */     { "AMF files"sv,       { ".amf"sv, ".zip.amf"sv, ".xml"sv } },
     /* FT_3MF */     { "3MF files"sv,       { ".3mf"sv } },
+#ifdef __APPLE__
+    // NSSavePanel cannot handle a two-segment extension: ".gcode.3mf" is not a valid
+    // filename extension, so AppKit fails to map it to a UTType. Depending on the macOS
+    // version it either keeps the raw string and compares it against [name pathExtension]
+    // (which is only "3mf"), rejecting every name with "The required extension is
+    // .gcode.3mf", or silently drops the filter altogether. Advertise the single-segment
+    // ".3mf" here instead; the caller appends ".gcode.3mf" to the returned path.
+    /* FT_GCODE_3MF */ {"Gcode 3MF files"sv, {".3mf"sv}},
+#else
     /* FT_GCODE_3MF */ {"Gcode 3MF files"sv, {".gcode.3mf"sv}},
+#endif
     /* FT_GCODE */   { "G-code files"sv,    { ".gcode"sv } },
 #ifdef __APPLE__
     /* FT_MODEL */
@@ -1192,8 +1204,141 @@ std::string extract_model_download_url_from_mac(const std::string &protocol_url)
 }
 } // namespace
 
+namespace {
+constexpr int kHomeShellPaintTimeoutMs = 2000;
+constexpr int kHomeShellPresentDelayMs = 120;
+} // namespace
+
+void GUI_App::begin_home_gl_wait(bool slow_bootup)
+{
+    if (m_home_gl_wait != HomeGlWait::Idle)
+        return;
+    m_home_gl_slow_bootup = slow_bootup;
+
+    WebViewPanel* web = (mainframe && mainframe->m_webview) ? mainframe->m_webview : nullptr;
+    if (!web) {
+        // No Home shell to wait for. Queue GL init and return to the idle handler.
+        perf_mark("startup.post_init.home_painted_skip");
+        perf_mark("startup.post_init.home_shell_shown");
+        m_home_gl_wait = HomeGlWait::Done;
+        CallAfter([this] { run_deferred_gl_init(); });
+        return;
+    }
+    if (web->is_home_shell_painted()) {
+        perf_mark("startup.post_init.home_painted");
+        m_home_gl_wait = HomeGlWait::WaitPresent;
+        m_home_gl_timer.StartOnce(kHomeShellPresentDelayMs);
+        return;
+    }
+    m_home_gl_wait = HomeGlWait::WaitPaint;
+    m_home_gl_timer.StartOnce(kHomeShellPaintTimeoutMs);
+}
+
+void GUI_App::on_home_shell_painted()
+{
+    if (m_home_gl_wait != HomeGlWait::WaitPaint)
+        return;
+    if (m_home_gl_timer.IsRunning())
+        m_home_gl_timer.Stop();
+    perf_mark("startup.post_init.home_painted");
+    m_home_gl_wait = HomeGlWait::WaitPresent;
+    m_home_gl_timer.StartOnce(kHomeShellPresentDelayMs);
+}
+
+void GUI_App::on_home_gl_timer(wxTimerEvent&)
+{
+    if (is_closing())
+        return;
+    if (m_home_gl_wait == HomeGlWait::WaitPaint)
+        perf_mark("startup.post_init.home_painted_timeout");
+    else if (m_home_gl_wait != HomeGlWait::WaitPresent)
+        return;
+    perf_mark("startup.post_init.home_shell_shown");
+    m_home_gl_wait = HomeGlWait::Done;
+    run_deferred_gl_init();
+}
+
+void GUI_App::run_deferred_gl_init()
+{
+    if (m_home_gl_init_ran || is_closing())
+        return;
+    m_home_gl_init_ran = true;
+    if (m_home_gl_timer.IsRunning())
+        m_home_gl_timer.Stop();
+    m_home_gl_wait = HomeGlWait::Done;
+    if (!mainframe || !plater_)
+        return;
+
+    PERF_TRACE("startup.load_gl_resources.deferred");
+    if (is_editor())
+        mainframe->select_tab(size_t(0));
+    plater_->canvas3D()->enable_render(false);
+    plater_->select_view_3D("3D");
+
+    auto *gl   = plater_->canvas3D();
+    auto *wxgl = gl->get_wxglcanvas();
+    bool  shown   = wxgl && wxgl->IsShownOnScreen();
+    bool  current = gl->make_current_for_postinit();
+    bool  used_tab_fallback = false;
+    if (!current) {
+        // Fallback: show Prepare so the GL context can activate (Linux / rare Win).
+        // Freeze to avoid flashing Home <-> Prepare during the switch.
+        perf_mark("startup.post_init.gl_need_show");
+        used_tab_fallback = true;
+        mainframe->Freeze();
+        perf_mark("startup.post_init.freeze");
+        mainframe->select_tab(size_t(MainFrame::tp3DEditor));
+        perf_mark("startup.post_init.switch_3d");
+        shown   = wxgl && wxgl->IsShownOnScreen();
+        current = gl->make_current_for_postinit();
+    } else {
+        perf_mark(shown ? "startup.post_init.gl_on_shown" : "startup.post_init.gl_on_hidden");
+    }
+
+    if (current) {
+        Size canvas_size = gl->get_canvas_size();
+        if (canvas_size.get_width() <= 0 || canvas_size.get_height() <= 0) {
+            const wxSize cs = plater_->GetClientSize();
+            canvas_size = Size(std::max(cs.GetWidth(), 1), std::max(cs.GetHeight(), 1));
+        }
+        wxGetApp().imgui()->set_display_size(static_cast<float>(canvas_size.get_width()),
+                                             static_cast<float>(canvas_size.get_height()));
+        {
+            PERF_TRACE("startup.init_opengl");
+            wxGetApp().init_opengl();
+        }
+        {
+            PERF_TRACE("startup.init_canvas3D");
+            gl->init();
+        }
+        wxGetApp().imgui()->new_frame();
+        gl->enable_render(true);
+        if (!m_home_gl_slow_bootup && shown) {
+            PERF_TRACE("startup.first_frame_render");
+            gl->render(false);
+        }
+        perf_mark("startup.post_init.gl_done");
+    } else {
+        BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << " Found glcontext not ready, postpone the init";
+        perf_mark("startup.post_init.gl_postpone");
+    }
+
+    if (is_editor()) {
+        mainframe->select_tab(size_t(0));
+        perf_mark("startup.post_init.switch_home");
+    }
+    if (used_tab_fallback) {
+        mainframe->Thaw();
+        perf_mark("startup.post_init.thaw");
+    }
+    mainframe->Update();
+    plater_->trigger_restore_project(1);
+    perf_mark("startup.post_init.gl_deferred_done");
+}
+
 void GUI_App::post_init()
 {
+    PERF_TRACE("startup.post_init");
     assert(initialized());
     if (! this->initialized())
         throw Slic3r::RuntimeError("Calling post_init() while not yet initialized");
@@ -1269,8 +1414,9 @@ void GUI_App::post_init()
                 for (auto & file : this->init_params->input_files) {
                     input_files.push_back(wxString::FromUTF8(file));
                 }
+                // Untitled still covers stl/step/obj; a 3mf gets its real name from load_project().
                 this->plater()->set_project_filename(_L("Untitled"));
-                this->plater()->load_files(input_files);
+                this->plater()->open_files_from_desktop(input_files);
                 try {
                     if (!input_files.empty()) {
                         std::string file_path = input_files.front().ToStdString();
@@ -1293,6 +1439,10 @@ void GUI_App::post_init()
         BOOST_LOG_TRIVIAL(info) << "slow bootup, won't render gl here.";
     }
     if (!switch_to_3d) {
+#ifdef __WXHAIKU__
+        // Haiku: GL is set up right away on the Prepare tab, which is the
+        // start tab there (the Home tab's web pages load when it is first
+        // shown, so there is no Home first paint to wait for).
         BOOST_LOG_TRIVIAL(info) << "begin load_gl_resources";
         mainframe->Freeze();
         plater_->canvas3D()->enable_render(false);
@@ -1327,16 +1477,29 @@ void GUI_App::post_init()
             BOOST_LOG_TRIVIAL(warning) << "Found glcontext not ready, postpone the init";
         }
 //#endif
-#ifndef __WXHAIKU__
-        // Haiku starts on the Prepare tab: the Home tab is three web pages,
+        // Haiku stays on the Prepare tab: the Home tab is three web pages,
         // which are loaded when the user goes there (WebViewPanel).
-        if (is_editor())
-            mainframe->select_tab(size_t(0));
-#endif
         mainframe->Thaw();
         BOOST_LOG_TRIVIAL(info) << "end load_gl_resources";
+        plater_->trigger_restore_project(1);
+#else
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ", begin load_gl_resources";
+        PERF_TRACE("startup.load_gl_resources");
+        // Home first-paint sequencing (do not Freeze / switch tab up front, and do not
+        // pump the event loop from this idle handler):
+        // 1) stay on Home without Freeze so WebView can paint
+        // 2) one-shot homepage_shell_painted, or skip when there is no Home WebView
+        // 3) after a short present delay, init GL on a hidden canvas
+        if (is_editor())
+            mainframe->select_tab(size_t(0));
+        mainframe->Update();
+        perf_mark("startup.post_init.pre_gl");
+        begin_home_gl_wait(slow_bootup);
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ", end load_gl_resources (GL deferred)";
+#endif // __WXHAIKU__
+    } else {
+        plater_->trigger_restore_project(1);
     }
-    plater_->trigger_restore_project(1);
     //#endif
 
     //BBS: remove GCodeViewer as seperate APP logic
@@ -1518,6 +1681,7 @@ void GUI_App::post_init()
         }
     }
     BOOST_LOG_TRIVIAL(info) << "finished post_init";
+    perf_mark("startup.post_init done");
 #ifdef _WIN32
     // Sets window property to mainframe so other instances can indentify it.
     OtherInstanceMessageHandler::init_windows_properties(mainframe, m_instance_hash_int);
@@ -1550,13 +1714,18 @@ GUI_App::GUI_App()
 {
     perf_mark("Application started");
 
+    {
+        PERF_TRACE("startup.init_app_config");
 	//app config initializes early becasuse it is used in instance checking in BambuStudio.cpp
     this->init_app_config();
+    }
     this->init_download_path();
 
 #if defined(__WXOSX__)
     m_macos_pending_pump_timer.Bind(wxEVT_TIMER, &GUI_App::on_macos_pending_pump, this);
 #endif
+    m_home_gl_timer.SetOwner(this);
+    Bind(wxEVT_TIMER, &GUI_App::on_home_gl_timer, this, m_home_gl_timer.GetId());
 
     reset_to_active();
 }
@@ -1591,6 +1760,8 @@ void GUI_App::shutdown()
 
     if (m_is_recreating_gui) return;
     set_closing(true);
+    if (m_home_gl_timer.IsRunning())
+        m_home_gl_timer.Stop();
     BOOST_LOG_TRIVIAL(info) << "exit";
 }
 
@@ -3240,9 +3411,55 @@ std::string get_system_info()
     return out.str();
 }
 
+// Restores the previous flag on destruction, including when MainFrame
+// construction throws. release() drops the suspend before Show().
+class PlaterConfigChangeSuspend {
+public:
+    explicit PlaterConfigChangeSuspend(GUI_App& app)
+        : m_app(app)
+        , m_prev(app.m_plater_on_config_change_suspended)
+    {
+        m_app.m_plater_on_config_change_suspended = true;
+    }
+    ~PlaterConfigChangeSuspend() { release(); }
+    void release()
+    {
+        if (!m_active)
+            return;
+        m_app.m_plater_on_config_change_suspended = m_prev;
+        m_active = false;
+    }
+    PlaterConfigChangeSuspend(const PlaterConfigChangeSuspend&) = delete;
+    PlaterConfigChangeSuspend& operator=(const PlaterConfigChangeSuspend&) = delete;
+private:
+    GUI_App& m_app;
+    bool     m_prev;
+    bool     m_active{ true };
+};
+
+void GUI_App::finish_suspended_plater_config(bool apply_full_config)
+{
+    if (!plater_)
+        return;
+    plater_->sidebar().flush_pending_filament_ui_refresh();
+    if (apply_full_config && preset_bundle) {
+        PERF_TRACE("startup.plater.on_config_change_full");
+        plater_->on_config_change(preset_bundle->full_config());
+        // full_config() merges print + filament + project config. Bed STL
+        // selection and the edge texture quads follow the printer preset,
+        // which load_current_presets applies via force_print_bed_update().
+        // That call was swallowed while suspended, so replay it last.
+        plater_->force_print_bed_update();
+        if (Tab* printer_tab = get_tab(Preset::TYPE_PRINTER)) {
+            if (DynamicPrintConfig* printer_config = printer_tab->get_config())
+                plater_->on_config_change(*printer_config);
+        }
+    }
+}
+
 bool GUI_App::on_init_inner()
 {
-    PERF_TRACE("Initializing application");
+    PERF_TRACE("startup.on_init_inner");
     wxLog::SetActiveTarget(new wxBoostLog());
     set_severity_level(app_config->get("severity_level"));
 
@@ -3319,10 +3536,10 @@ bool GUI_App::on_init_inner()
     }
 #endif
 
-    BOOST_LOG_TRIVIAL(info) << "gui mode " << KV(log_key::app_version, SLIC3R_VERSION) << KV(log_key::build_time, SLIC3R_BUILD_TIME);
+    BOOST_LOG_TRIVIAL(info) << "gui mode " << KV(log_key::app_version, SLIC3R_VERSION) << KV(log_key::build_time, Slic3r::build_time());
 
 #if !BBL_RELEASE_TO_PUBLIC
-    BOOST_LOG_TRIVIAL(info) << KV(log_key::build_commit, SLIC3R_COMPILE_VERSION);
+    BOOST_LOG_TRIVIAL(info) << KV(log_key::build_commit, Slic3r::build_commit());
 #endif
 
     BOOST_LOG_TRIVIAL(info) << get_system_info();
@@ -3407,7 +3624,10 @@ bool GUI_App::on_init_inner()
     // Like here, before the show InfoDialog in check_older_app_config()
 
     // If load_language() fails, the application closes.
-    load_language(wxString(), true);
+    {
+        PERF_TRACE("startup.load_language_and_theme");
+        load_language(wxString(), true);
+    }
 #ifdef _MSW_DARK_MODE
 
 #ifndef __WINDOWS__
@@ -3439,10 +3659,11 @@ bool GUI_App::on_init_inner()
         //update_label_colours_from_appconfig();
     }
     if (bool new_sys_menu_enabled = app_config->get("sys_menu_enabled") == "1";
-        init_sys_menu_enabled != new_sys_menu_enabled)
+        init_sys_menu_enabled != new_sys_menu_enabled) {
 #ifdef __WINDOWS__
         NppDarkMode::SetSystemMenuForApp(new_sys_menu_enabled);
 #endif
+    }
 #endif
 
     if (m_last_config_version) {
@@ -3490,6 +3711,7 @@ bool GUI_App::on_init_inner()
     });
     const bool show_splash_screen = true;
     if (show_splash_screen) {
+        PERF_TRACE("startup.show_splash");
         // make a bitmap with dark grey banner on the left side
         //BBS make BBL splash screen bitmap
         wxBitmap bmp = BBLSplashScreen::MakeBitmap();
@@ -3520,11 +3742,14 @@ bool GUI_App::on_init_inner()
     }
 
     BOOST_LOG_TRIVIAL(info) << "loading systen presets...";
-    preset_bundle = new PresetBundle();
+    {
+        PERF_TRACE("startup.create_preset_bundle");
+        preset_bundle = new PresetBundle();
 
-    // just checking for existence of Slic3r::data_dir is not enough : it may be an empty directory
-    // supplied as argument to --datadir; in that case we should still run the wizard
-    preset_bundle->setup_directories();
+        // just checking for existence of Slic3r::data_dir is not enough : it may be an empty directory
+        // supplied as argument to --datadir; in that case we should still run the wizard
+        preset_bundle->setup_directories();
+    }
 
 
     if (m_init_app_config_from_older)
@@ -3655,8 +3880,11 @@ bool GUI_App::on_init_inner()
     std::map<std::string, std::string> extra_headers = get_extra_header();
     Slic3r::Http::set_extra_headers(extra_headers);
 
-    copy_network_if_available();
-    on_init_network();
+    {
+        PERF_TRACE("startup.init_network");
+        copy_network_if_available();
+        on_init_network();
+    }
 
     if (m_agent && m_agent->is_user_login()) {
         enable_user_preset_folder(true);
@@ -3671,7 +3899,10 @@ bool GUI_App::on_init_inner()
             // If there are substitutions in system profiles, then a "reconfigure" event shall be triggered, which will force
             // installation of a compatible system preset, thus nullifying the system preset substitutions.
             std::string errors_cummulative;
-            std::tie(init_params->preset_substitutions, errors_cummulative) = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
+            {
+                PERF_TRACE("startup.load_presets");
+                std::tie(init_params->preset_substitutions, errors_cummulative) = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::EnableSystemSilent);
+            }
             if (!errors_cummulative.empty())
                 show_error(nullptr, errors_cummulative);
             // AppConfig-restored filament colors may predate the JSON primary-color alignment
@@ -3704,6 +3935,7 @@ bool GUI_App::on_init_inner()
     if (m_disable_fila_manager) {
         BOOST_LOG_TRIVIAL(info) << "Filament Manager disabled by " << FilaManagerEnabledConfigKey;
     } else {
+        PERF_TRACE("startup.init_filament_manager");
         // Initialize Filament Manager store & sync
         if (!m_fila_manager_store) {
             m_fila_manager_store = new wgtFilaManagerStore();
@@ -3731,7 +3963,15 @@ bool GUI_App::on_init_inner()
     }
 
     BOOST_LOG_TRIVIAL(info) << "create the main window";
-    mainframe = new MainFrame();
+    // Defer Plater::on_config_change across MainFrame + load_current_presets.
+    // Released before Show() so the first paint does not see printer_model
+    // "bbl_empty" or the default bed. G-code viewer skips full_config: its
+    // update_layout() 200x200 bed must remain.
+    PlaterConfigChangeSuspend suspend_plater_config(*this);
+    {
+        PERF_TRACE("startup.create_mainframe");
+        mainframe = new MainFrame();
+    }
     // hide settings tabs after first Layout
     if (is_editor()) {
         mainframe->select_tab(size_t(0));
@@ -3746,7 +3986,11 @@ bool GUI_App::on_init_inner()
 
     plater_->init_notification_manager();
 
-    m_printhost_job_queue.reset(new PrintHostJobQueue(mainframe->printhost_queue_dlg()));
+    // Dialog is created on first enqueue, before the upload thread starts.
+    // Bind the frame here so a later rebuild cannot retarget that getter.
+    MainFrame* queue_frame = mainframe;
+    m_printhost_job_queue.reset(new PrintHostJobQueue(
+        [queue_frame]() { return queue_frame->printhost_queue_dlg(); }));
 
     if (is_gcode_viewer()) {
         mainframe->update_layout();
@@ -3756,6 +4000,11 @@ bool GUI_App::on_init_inner()
     }
     else
         load_current_presets();
+
+    // Flush before the dirty baseline. Diameter validation rewrites
+    // project_config; recording the baseline first marks a fresh project dirty.
+    suspend_plater_config.release();
+    finish_suspended_plater_config(!is_gcode_viewer());
 
     if (plater_ != nullptr) {
         plater_->reset_project_dirty_initial_presets();
@@ -3870,6 +4119,7 @@ bool GUI_App::on_init_inner()
     flush_logs();
 
     BOOST_LOG_TRIVIAL(info) << "finished the gui app init";
+    perf_mark("startup.on_init_inner done");
     return true;
 }
 
@@ -4557,6 +4807,10 @@ void GUI_App::recreate_GUI(const wxString &msg_name)
     old_main_frame->SetClientObject(new ClientData);
 
     switch_window_pools();
+    // Same coalesce window as on_init_inner: defer config applies across
+    // MainFrame construction + load_current_presets, then one full_config
+    // before Show() so project_config reaches the new Plater.
+    PlaterConfigChangeSuspend suspend_plater_config(*this);
     mainframe = new MainFrame();
     if (is_editor())
         // hide settings tabs after first Layout
@@ -4568,11 +4822,20 @@ void GUI_App::recreate_GUI(const wxString &msg_name)
     SetTopWindow(mainframe);
 
     dlg.Update(30, _L("Rebuild") + dots);
+    // Stop the old queue before Destroy so its upload thread is not still
+    // posting to the dialog owned by the frame going away.
+    m_printhost_job_queue.reset();
+    {
+        MainFrame* queue_frame = mainframe;
+        m_printhost_job_queue.reset(new PrintHostJobQueue(
+            [queue_frame]() { return queue_frame->printhost_queue_dlg(); }));
+    }
     old_main_frame->Destroy();
 
     dlg.Update(80, _L("Loading current presets") + dots);
-    m_printhost_job_queue.reset(new PrintHostJobQueue(mainframe->printhost_queue_dlg()));
     load_current_presets();
+    suspend_plater_config.release();
+    finish_suspended_plater_config(true);
     mainframe->Show(true);
     //mainframe->refresh_plugin_tips();
 
@@ -5441,21 +5704,28 @@ int GUI_App::request_user_unbind(std::string dev_id)
     return result;
 }
 
-std::string GUI_App::handle_web_request(std::string cmd)
+std::string GUI_App::handle_web_request(std::string cmd, WebRequestSource source)
 {
     try {
         //BBS use nlohmann json format
-        BOOST_LOG_TRIVIAL(info) << cmd;
         std::stringstream ss(cmd), oss;
         pt::ptree root, response;
         pt::read_json(ss, root);
         if (root.empty())
             return "";
 
+        const auto authorized_command = WebViewSecurity::AuthorizeWebCommand(root, source);
+        if (!authorized_command.accepted) {
+            BOOST_LOG_TRIVIAL(warning) << "web request rejected"
+                                       << " source=" << WebViewSecurity::SourceName(source)
+                                       << " reason=" << authorized_command.reason
+                                       << " command=" << WebViewSecurity::CommandForLog(authorized_command.command);
+            return "";
+        }
+
         boost::optional<std::string> sequence_id = root.get_optional<std::string>("sequence_id");
-        boost::optional<std::string> command = root.get_optional<std::string>("command");
-        if (command.has_value()) {
-            std::string command_str = command.value();
+        {
+            const std::string &command_str = authorized_command.command;
             BOOST_LOG_TRIVIAL(info) << command_str;
             if (command_str.compare("request_project_download") == 0) {
                 if (root.get_child_optional("data") != boost::none) {
@@ -5492,7 +5762,8 @@ std::string GUI_App::handle_web_request(std::string cmd)
                 //Check Plugin
                 bool bValid = is_compatibility_version();
                 if (!bValid) {
-                    CallAfter([this] { handle_web_request("{\"sequence_id\":1,\"command\":\"homepage_need_networkplugin\"}");
+                    CallAfter([this] { handle_web_request("{\"sequence_id\":1,\"command\":\"homepage_need_networkplugin\"}",
+                                                         WebRequestSource::Internal);
                         });
                     return "";
                 }
@@ -5671,6 +5942,12 @@ std::string GUI_App::handle_web_request(std::string cmd)
                     }
                 }
             }
+            else if (command_str.compare("homepage_shell_painted") == 0) {
+                // Home JS: TranslatePage + double-rAF — shell chrome is ready to present.
+                if (mainframe && mainframe->m_webview)
+                    mainframe->m_webview->mark_home_shell_painted();
+                on_home_shell_painted();
+            }
             else if (command_str.compare("homepage_leftmenu_clicked") == 0) {
                 if (root.get_child_optional("menu") != boost::none) {
                     std::string strMenu = root.get_optional<std::string>("menu").value();
@@ -5707,7 +5984,8 @@ std::string GUI_App::handle_web_request(std::string cmd)
                         //Check Plugin
                         bool bValid = is_compatibility_version();
                         if (!bValid) {
-                            CallAfter([this] { handle_web_request("{\"sequence_id\":1,\"command\":\"homepage_need_networkplugin\"}");
+                            CallAfter([this] { handle_web_request("{\"sequence_id\":1,\"command\":\"homepage_need_networkplugin\"}",
+                                                                 WebRequestSource::Internal);
                                 });
                             return "";
                         }
@@ -5835,7 +6113,7 @@ std::string GUI_App::handle_web_request(std::string cmd)
         }
     }
     catch (...) {
-        BOOST_LOG_TRIVIAL(warning) << "parse json cmd failed " << cmd;
+        BOOST_LOG_TRIVIAL(warning) << "parse json cmd failed, payload_bytes=" << cmd.size();
         return "";
     }
     return "";
@@ -5857,9 +6135,9 @@ void GUI_App::handle_script_message(std::string msg)
             }
             if (cmd == "user_ticket_login") {
                 std::string ticket = j["data"]["ticket"];
-                TicketLoginTask::perform_async(ticket, [this](std::string login_info) {
-                    if (m_agent && !login_info.empty()) {
-                        m_agent->change_user(login_info);
+                TicketLoginTask::perform_async(ticket, [this](TicketLoginTask::Result result) {
+                    if (m_agent && result.status == TicketLoginTask::Status::Success) {
+                        m_agent->change_user(result.login_info);
                         if (m_agent->is_user_login()) { request_user_login(1); }
                     }
                 });
@@ -6789,6 +7067,20 @@ void GUI_App::check_privacy_version(int online_login)
 void GUI_App::report_consent(std::string expand)
 {
     if(expand.empty()) return;
+
+    if (m_agent && app_config->is_engineering_region()) {
+        const std::string host = m_agent->get_bambulab_host();
+        if (boost::algorithm::ends_with(host, "bambulab.com") || boost::algorithm::ends_with(host, "bambulab.cn")) {
+            BOOST_LOG_TRIVIAL(warning) << "skip report consent, test environment but network plugin connects to production " << KV(log_key::url, host);
+            return;
+        }
+    }
+
+    if (m_agent && m_agent->is_user_login()) {
+        m_agent->report_consent(expand);
+        return;
+    }
+
     update_http_extra_header();
     std::string query_params = "v1/user-service/user/consent";
     std::string url = get_http_url(app_config->get_country_code(), query_params);
@@ -6806,6 +7098,7 @@ void GUI_App::report_consent(std::string expand)
         )
         .on_error(
             [this](std::string body, std::string error, unsigned status) {
+                BOOST_LOG_TRIVIAL(warning) << "report consent failed " << KV(log_key::http_code, status) << " error=" << error;
             }
         )
         .perform();
@@ -8227,6 +8520,9 @@ bool GUI_App::check_print_host_queue()
 {
     wxString dirty;
     std::vector<std::pair<std::string, std::string>> jobs;
+    // Never created => no jobs were ever shown / tracked in the queue UI.
+    if (!mainframe->m_printhost_queue_dlg)
+        return true;
     // Get ongoing jobs from dialog
     mainframe->m_printhost_queue_dlg->get_active_jobs(jobs);
     if (jobs.empty())
@@ -8264,7 +8560,12 @@ bool GUI_App::checked_tab(Tab* tab)
 //BBS: add preset combo box re-activate logic
 void GUI_App::load_current_presets(bool active_preset_combox/*= false*/, bool check_printer_presets_ /*= true*/)
 {
-    PERF_TRACE("Loading presets");
+    static int s_load_current_presets_left = 12;
+    if (s_load_current_presets_left > 0) {
+        --s_load_current_presets_left;
+        perf_mark("startup.load_current_presets call#" + std::to_string(12 - s_load_current_presets_left));
+    }
+    PERF_TRACE("startup.load_current_presets");
 
     // check printer_presets for the containing information about "Print Host upload"
     // and create physical printer from it, if any exists
@@ -8457,7 +8758,7 @@ void GUI_App::MacOpenFiles(const wxArrayString &fileNames)
                 for (size_t i = 0; i < non_gcode_files.size(); ++i) {
                     input_files.push_back(non_gcode_files[i]);
                 }
-                this->plater()->load_files(input_files);
+                this->plater()->open_files_from_desktop(input_files);
             }
             else {
                 for (size_t i = 0; i < files.size(); ++i) {
@@ -9152,14 +9453,9 @@ void GUI_App::report_consent_common(bool agree, std::string scene, std::string f
     consent["consentBody"] = consentBody.dump();
     std::string post_body_str = consent.dump();
 
-    NetworkAgent* agent = GUI::wxGetApp().getAgent();
     BOOST_LOG_TRIVIAL(info) << "client_id:" << wxGetApp().app_config->get("slicer_uuid") << "\nreport_consent:" << post_body_str;
 
-    if (agent && agent->is_user_login())
-        agent->report_consent(post_body_str);
-    else {
-        wxGetApp().report_consent(post_body_str);
-    }
+    wxGetApp().report_consent(post_body_str);
 }
 
 // static method accepting a wxWindow object as first parameter
@@ -9323,15 +9619,10 @@ bool is_soluble_filament(int extruder_id)
     return support_option->get_at(0);
 };
 
-std::vector<bool> has_filament_groups(const std::vector<std::vector<string>> &model_filament_groups)
+bool has_filaments(const std::vector<string>& model_filaments)
 {
-    std::vector<bool> matches(model_filament_groups.size(), false);
-    size_t remaining = matches.size();
-    if (remaining == 0)
-        return matches;
-
     auto &filament_presets = Slic3r::GUI::wxGetApp().preset_bundle->filament_presets;
-    if (!Slic3r::GUI::wxGetApp().plater()) return matches;
+    if (!Slic3r::GUI::wxGetApp().plater()) return false;
     auto model_objects = Slic3r::GUI::wxGetApp().plater()->model().objects;
     const Slic3r::DynamicPrintConfig &config = wxGetApp().preset_bundle->full_config();
     Model::setExtruderParams(config, filament_presets.size());
@@ -9343,23 +9634,11 @@ std::vector<bool> has_filament_groups(const std::vector<std::vector<string>> &mo
             auto ve = vol->get_extruders(global_features);
             for (auto id : ve) {
                 auto name = get_filament_name(id);
-                for (size_t i = 0; i < model_filament_groups.size(); ++i) {
-                    if (! matches[i] &&
-                        find(model_filament_groups[i].begin(), model_filament_groups[i].end(), name) != model_filament_groups[i].end()) {
-                        matches[i] = true;
-                        if (--remaining == 0)
-                            return matches;
-                    }
-                }
+                if (find(model_filaments.begin(), model_filaments.end(), name) != model_filaments.end()) return true;
             }
         }
     }
-    return matches;
-}
-
-bool has_filaments(const std::vector<string>& model_filaments)
-{
-    return has_filament_groups({model_filaments}).front();
+    return false;
 }
 
 bool is_support_filament(int extruder_id, bool strict_check)
