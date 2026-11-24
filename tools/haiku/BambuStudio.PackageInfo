@@ -1,5 +1,5 @@
 name			bambustudio
-version			2.9.1.70~airos1-6
+version			2.9.2.62~airos1-1
 architecture	x86_64
 summary			"Slicer for Bambu Lab and other FDM 3D printers"
 description		"Bambu Studio prepares 3D models for printing: it arranges and \
@@ -33,8 +33,8 @@ source-urls {
 	"https://github.com/airos-works/open-bamboo-networking"
 }
 provides {
-	bambustudio = 2.9.1.70~airos1
-	app:BambuStudio = 2.9.1.70~airos1
+	bambustudio = 2.9.2.62~airos1
+	app:BambuStudio = 2.9.2.62~airos1
 }
 requires {
 	summit_webkit >= 1.10.0
