@@ -54,12 +54,12 @@ By default, after installing Bambu Studio without the networking plugin, you can
 <!-- airos-ci:latest-builds:start -->
 ## Latest builds
 
-Built automatically by air/OS CI from commit `f7b8ef4` on 2026-11-13 ([all files](https://github.com/airos-works/BambuStudio/releases/tag/latest)).
+Built automatically by air/OS CI from commit `7770ff5` on 2026-11-25 ([all files](https://github.com/airos-works/BambuStudio/releases/tag/latest)).
 
 | Architecture | Package |
 |---|---|
-| arm64 | [bambustudio-2.9.1.70.airos1-4-arm64.hpkg](https://github.com/airos-works/BambuStudio/releases/download/latest/bambustudio-2.9.1.70.airos1-4-arm64.hpkg) |
-| x86_64 | [bambustudio-2.9.1.70.airos1-4-x86_64.hpkg](https://github.com/airos-works/BambuStudio/releases/download/latest/bambustudio-2.9.1.70.airos1-4-x86_64.hpkg) |
+| arm64 | [bambustudio-2.9.2.62.airos1-1-arm64.hpkg](https://github.com/airos-works/BambuStudio/releases/download/latest/bambustudio-2.9.2.62.airos1-1-arm64.hpkg) |
+| x86_64 | [bambustudio-2.9.2.62.airos1-1-x86_64.hpkg](https://github.com/airos-works/BambuStudio/releases/download/latest/bambustudio-2.9.2.62.airos1-1-x86_64.hpkg) |
 
-Install with `pkgman install <file>`, or copy the file into `/boot/system/packages`. Haiku SDK: x86_64 hrev60207-2644-gfb4dce1d44, arm64 hrev60207-2645-g6122e2dad0.
+Install with `pkgman install <file>`, or copy the file into `/boot/system/packages`. Haiku SDK: x86_64 hrev60207-2958-g7b970c6373, arm64 hrev60207-2963-g54a098c6dc.
 <!-- airos-ci:latest-builds:end -->
